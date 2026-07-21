@@ -4,6 +4,7 @@ import fromScenery.SettingsEditor
 import graphics.scenery.Origin
 import microscenery.FileMicroscopeHardware
 import microscenery.MicroscenerySettings
+import microscenery.Settings
 import microscenery.network.RemoteMicroscopeServer
 import microscenery.network.SliceStorage
 import microscenery.signals.BaseServerSignal
@@ -20,9 +21,12 @@ class RemoteFileViewerAblationServer {
         fun main(args: Array<String>) {
             // settings like port can be set in [microscenery.properties]
             val zContext = ZContext()
+            MicroscenerySettings.set(Settings.Ablation.SizeUM, 40f)
 
-            val microscope = FileMicroscopeHardware("""D:\volumes\spindle\NikonSD_100x_R1EmESC_01-1.tif""")
-//            val microscope = FileMicroscopeHardware("""/Users/jan/volumes/Lund-100MB.tif""")
+            val microscope = FileMicroscopeHardware("""/Users/jan/volumes/droso-royer-autopilot-transposed-bdv/t211_y-scaled-five-times_8bit_cropped.tif""")
+
+            //val microscope = FileMicroscopeHardware("""D:\volumes\spindle\NikonSD_100x_R1EmESC_01-1.tif""")
+            //val microscope = FileMicroscopeHardware("""/Users/jan/volumes/Lund-100MB.tif""")
 
             RemoteMicroscopeServer(
                 AblationSimulationMicroscope(microscope, imgOrigin = Origin.FrontBottomLeft),
@@ -31,7 +35,7 @@ class RemoteFileViewerAblationServer {
                 announceWithBonjour = true,
                 acquireOnConnect = true,
                 serverHello = BaseServerSignal.ServerHello(
-                    "File Microscope",
+                    "Jans File Microscope",
                     ServerType.MICROSCOPE,
                     "Ablation Simulation"
                 ))
