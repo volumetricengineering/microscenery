@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentSkipListMap
  *
  * Default is 2mb.
  */
-class SliceStorage(val maxStorageSize: Int = MicroscenerySettings.get("Network.DataStorageSizeMb", 2) * 1024 * 1024) {
+class SliceStorage(val maxStorageSize: Int = MicroscenerySettings.get("Network.DataStorageSizeMb", 500) * 1024 * 1024) {
     private val logger by lazyLogger(System.getProperty("scenery.LogLevel", "info"))
 
     private var currentlyStoredBytes = 0

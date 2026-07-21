@@ -92,6 +92,8 @@ object Settings {
          * overwrites the exposure time extracted from the first extracted .czexp
          * */ const val exposureTime = "ZenMicroscope.exposureTime"
         /** int */ const val readChannel = "ZenMicroscope.readChannel"
+        /** float */ const val debugBleachingImageOffsetFactorStageCooridnates = "ZenMicroscope.debugBleachingImageOffsetFactorStageCooridnates"
+        /** float */ const val debugBleachingImageOffsetFactorPixelCooridnates = "ZenMicroscope.debugBleachingImageOffsetFactorPixelCooridnates"
     }
 
     object UI {
