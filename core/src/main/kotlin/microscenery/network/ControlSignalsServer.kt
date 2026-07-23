@@ -85,12 +85,16 @@ class ControlSignalsServer(
 
         // process incoming messages first.
         // First frame in each message is the sender identity
-        if (identity != null) {
-            clients += identity
-            val event = org.withXR.network.v3.BaseClientSignal.parseFrom(socket.recv())
-
-            synchronized(signalsIn) {
-                signalsIn(event.toPoko())
+        if (identity != null && identity.size == 5) {
+            //zmq identities always seem to have size==5 still not a perfect protection against garbage request but the odds are in our favor
+            try {
+                val event = org.withXR.network.v3.BaseClientSignal.parseFrom(socket.recv())
+                clients += identity // add client only after successfully parsing message
+                synchronized(signalsIn) {
+                    signalsIn(event.toPoko())
+                }
+            } catch (t: com.google.protobuf.InvalidProtocolBufferException){
+                logger.warn("Error parsing message as protobuf. Ignoring it. ${t.message}", )
             }
         }
 
