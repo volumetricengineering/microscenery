@@ -5,14 +5,13 @@ import graphics.scenery.attribute.material.Material
 import graphics.scenery.primitives.Atmosphere
 import microscenery.*
 import microscenery.UI.StageSpaceUI
-import microscenery.VRUI.VRUIManager
 import microscenery.stageSpace.MicroscopeLayout
 import microscenery.stageSpace.StageSpaceManager
 import org.joml.Vector3f
 import kotlin.concurrent.thread
 
 
-class RappNeuroStack : DefaultScene("RappNeuroStack", VR = !true, width = 840, height = 840) {
+class RappNeuroStack : DefaultScene("RappNeuroStack", width = 840, height = 840) {
 
     val atmosphere = !true
 
@@ -92,13 +91,6 @@ class RappNeuroStack : DefaultScene("RappNeuroStack", VR = !true, width = 840, h
 
         inputHandler?.let {
             ssUI.stageKeyUI(it, cam)
-        }
-
-        if (VR) {
-            VRUIManager.initBehavior(
-                scene, hmd, inputHandler,
-                stageSpaceUI = ssUI, msHub = msHub
-            )
         }
     }
 

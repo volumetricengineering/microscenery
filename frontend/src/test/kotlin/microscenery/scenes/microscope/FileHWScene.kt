@@ -7,7 +7,6 @@ import graphics.scenery.volumes.TransferFunction
 import microscenery.*
 import microscenery.UI.StageSpaceUI
 import microscenery.UI.UIModel
-import microscenery.VRUI.VRUIManager
 import microscenery.stageSpace.MicroscopeLayout
 import microscenery.stageSpace.StageSpaceManager
 import org.joml.Vector3f
@@ -90,11 +89,6 @@ class FileHWScene : DefaultScene(withSwingUI = false, VR = true) {
             inputHandler?.let {
                 ssUI.stageKeyUI(it, cam)
             }
-
-            VRUIManager.initBehavior(
-                scene, hmd, inputHandler,
-                stageSpaceUI = ssUI, msHub = MicrosceneryHub(hub)
-            )
         }
     }
 

@@ -1,6 +1,7 @@
 package microscenery.UI
 
 import graphics.scenery.Sphere
+import graphics.scenery.attribute.spatial.HasCustomSpatial
 import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.primitives.Cylinder
 import graphics.scenery.utils.extensions.minus
@@ -19,7 +20,7 @@ import org.scijava.ui.behaviour.ClickBehaviour
 class AblateStageUICommand(stageSpaceManager: StageSpaceManager): StageUICommand("ablate", "7", object : ClickBehaviour {
     val logger by lazyLogger(System.getProperty("scenery.LogLevel", "info"))
 
-    val ablationPoints = mutableListOf<HasSpatial>()
+    var ablationPoints = mutableListOf<HasCustomSpatial<*>>()
     var goneToFirstPoint = false
 
     override fun click(x: Int, y: Int) {

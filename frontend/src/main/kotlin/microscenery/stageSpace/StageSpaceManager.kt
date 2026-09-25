@@ -2,6 +2,7 @@ package microscenery.stageSpace
 
 import graphics.scenery.*
 import graphics.scenery.attribute.material.Material
+import graphics.scenery.attribute.spatial.HasCustomSpatial
 import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.attribute.spatial.Spatial
 import graphics.scenery.utils.extensions.minus
@@ -12,7 +13,6 @@ import graphics.scenery.utils.lazyLogger
 import microscenery.*
 import microscenery.Settings
 import microscenery.UI.UIModel
-import microscenery.VRUI.StageSpaceLabel
 import microscenery.hardware.MicroscopeHardware
 import microscenery.primitives.Pyramid
 import microscenery.signals.*
@@ -42,16 +42,14 @@ class StageSpaceManager(
     val stageRoot = RichNode("stage root")
     val scaleAndRotationPivot = RichNode("scaleAndRotationPivot")
 
-    val selectionIndicator: HasSpatial
+    val selectionIndicator: HasCustomSpatial<*>
 
     internal val stageAreaBorders: Box
     var stageAreaCenter = Vector3f()
         private set
 
     val sliceManager = SliceManager(hardware, stageRoot, scene, msHub)
-    val ablationManager = AblationManager(hardware,this,scene)
     val focusManager = FocusManager(this,msHub)
-    private val stageSpaceLabel: StageSpaceLabel?
 
     var stagePosition: Vector3f
         get() = hardware.status().stagePosition
@@ -74,7 +72,6 @@ class StageSpaceManager(
         msHub.addAttribute(MicroscopeHardware::class.java,hardware)
         msHub.addAttribute(StageSpaceManager::class.java,this)
         msHub.addAttribute(SliceManager::class.java, sliceManager)
-        msHub.addAttribute(AblationManager::class.java, ablationManager)
 
         scene.addChild(scaleAndRotationPivot)
         scaleAndRotationPivot.addChild(stageRoot)
@@ -91,13 +88,6 @@ class StageSpaceManager(
         stageRoot.addChild(stageAreaBorders)
         BoundingGrid().node = stageAreaBorders
         stageAreaBorders.visible = MicroscenerySettings.get(Settings.StageSpace.ShowStageAreaBorders,true)
-
-        stageSpaceLabel = if (!MicroscenerySettings.get(Settings.StageSpace.HideStageSpaceLabel,false)){
-                StageSpaceLabel(scene, msHub)
-            } else {
-                null
-            }
-
 
         selectionIndicator = initSelectionIndicator()
 
@@ -116,7 +106,6 @@ class StageSpaceManager(
             }
             is MicroscopeStatus -> {
                 focusManager.newStagePosition(signal.stagePosition)
-                stageSpaceLabel?.updateMicroscopeStatusLabel(signal)
             }
             is MicroscopeStack -> {
                 sliceManager.handleStackSignal(signal.stack, msHub.getAttribute(Hub::class.java))
@@ -125,6 +114,7 @@ class StageSpaceManager(
                 logger.info("Ablation took ${signal.totalTimeMillis}ms for ${signal.perPointTime.size} points " +
                         "(${signal.mean()}ms mean)")
             }
+            else -> {}
         }
     }
 
@@ -288,7 +278,7 @@ class StageSpaceManager(
                     selectionIndicator.detach()
                     (event.new as? Node)?.let { node ->
                         val bb = node.boundingBox ?: return@let
-                        val pos = Vector3f(bb.center)
+                        val pos = Vector3f(bb.localCenter)
                         pos.y = bb.asWorld().max.y
                         selectionIndicator.spatial().position = pos
                         scene.addChild(selectionIndicator)

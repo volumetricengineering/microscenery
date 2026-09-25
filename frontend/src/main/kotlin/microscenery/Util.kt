@@ -8,34 +8,15 @@ import graphics.scenery.attribute.material.HasMaterial
 import graphics.scenery.controls.InputHandler
 import graphics.scenery.controls.OpenVRHMD
 import graphics.scenery.controls.behaviours.Touchable
-import microscenery.VRUI.Gui3D.Column
-import microscenery.VRUI.Gui3D.Row
-import microscenery.VRUI.Gui3D.TextBox
-import microscenery.VRUI.behaviors.AnalogInputWrapper
+import graphics.scenery.ui.Column
+import graphics.scenery.ui.Row
+import graphics.scenery.ui.TextBox
 import org.joml.Vector3f
 import org.scijava.ui.behaviour.Behaviour
 import org.scijava.ui.behaviour.DragBehaviour
 import kotlin.concurrent.thread
 import kotlin.random.Random
 
-
-fun wrapForAnalogInputIfNeeded(
-    scene: Scene,
-    button: OpenVRHMD.OpenVRButton,
-    behavior: DragBehaviour
-): Behaviour {
-
-    val analogButtons = listOf(
-        OpenVRHMD.OpenVRButton.Up,
-        OpenVRHMD.OpenVRButton.Down,
-        OpenVRHMD.OpenVRButton.Left,
-        OpenVRHMD.OpenVRButton.Right
-    )
-    return if (button in analogButtons)
-        AnalogInputWrapper(behavior, scene)
-    else
-        behavior
-}
 
 /**
  * Remove node from parent if there is one.
@@ -100,7 +81,6 @@ fun Camera.showMessage2(message: List<String>, distance: Float = 0.75f, size: Fl
             *message.map {
                 Row(TextBox(it))
             }.toTypedArray(),
-            middleAlign = true,
             invertedYOrder = true
         )
     )

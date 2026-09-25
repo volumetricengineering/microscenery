@@ -21,6 +21,7 @@ class TransferFunctionManager(val sliceManager: SliceManager, val msHub: Microsc
             field = value
             updateTransferFunction()
         }
+
     override var transferFunction: TransferFunction = TransferFunction.ramp(0.0f, 1.0f, 0.5f)
         set(value) {
             field = value
@@ -33,7 +34,7 @@ class TransferFunctionManager(val sliceManager: SliceManager, val msHub: Microsc
             updateColorMap()
         }
 
-    override var range: Pair<Float, Float> = 0.0f to Short.MAX_VALUE.toFloat()
+    override var displayRangeLimits: Pair<Float, Float> = 0.0f to Short.MAX_VALUE.toFloat()
 
     init {
         updateTransferFunction()

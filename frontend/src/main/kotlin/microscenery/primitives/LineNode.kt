@@ -3,6 +3,7 @@ package microscenery.primitives
 import fromScenery.utils.extensions.minus
 import graphics.scenery.Sphere
 import graphics.scenery.attribute.material.Material
+import graphics.scenery.attribute.spatial.HasCustomSpatial
 import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.controls.behaviours.Grabable
 import graphics.scenery.controls.behaviours.Touchable
@@ -64,8 +65,8 @@ open class LineNode(
      * @param fixedLength uses cylinder size instead of scaling. Allows no runtime manipulation. Is required for the simulation stuff.
      */
     class LineConnection(
-        val from: HasSpatial,
-        val to: HasSpatial,
+        val from: HasCustomSpatial<*>,
+        val to: HasCustomSpatial<*>,
         material: Material,
         radius: Float,
         fixedLength: Boolean = false
@@ -86,7 +87,7 @@ open class LineNode(
         }
 
         companion object {
-            fun getLength(from: HasSpatial, to: HasSpatial): Float {
+            fun getLength(from: HasCustomSpatial<*>, to: HasCustomSpatial<*>): Float {
                 val diff = to.spatial().position - from.spatial().position
                 return diff.length()
             }

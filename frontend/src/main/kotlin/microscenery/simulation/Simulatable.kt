@@ -1,6 +1,7 @@
 package microscenery.simulation
 
 import fromScenery.utils.extensions.times
+import graphics.scenery.attribute.spatial.HasCustomSpatial
 import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.attribute.spatial.Spatial
 import microscenery.copy
@@ -16,7 +17,7 @@ interface Simulatable {
     /**
      * Get world matrix as if stage root is the scene root.
      */
-    fun HasSpatial.inverseStageMatrix(stageRoot: Spatial): Matrix4f {
+    fun HasCustomSpatial<*>.inverseStageMatrix(stageRoot: Spatial): Matrix4f {
         val target = stageRoot.world.copy().invertAffine() * Matrix4f(spatial().world)
         return target.invertAffine()
     }
