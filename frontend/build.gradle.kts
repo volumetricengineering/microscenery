@@ -1,6 +1,5 @@
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm") version "2.2.10"
@@ -15,8 +14,6 @@ repositories {
     maven { url = uri("https://jitpack.io") }
     maven("https://maven.scijava.org/content/groups/public")
 }
-
-
 
 dependencies {
     // This should point to the most recent commit of scenery:jans-dirtier-branch

@@ -10,7 +10,6 @@ import microscenery.Settings
 import microscenery.UI.CrossRayToPosBehavior
 import microscenery.UI.StageSpaceUI
 import microscenery.UI.StageUICommand
-import microscenery.VRUI.PointCloudAblationTool.Ink
 import microscenery.hardware.MicroscopeHardware
 import microscenery.simulation.AblationSimulationMicroscope
 import microscenery.stageSpace.StageSpaceManager
@@ -85,59 +84,59 @@ class LocalZenPMScene : DefaultScene(withSwingUI = true) {
         }
     }
 
-    fun placeAblationInk(pos: Vector3f){
-        val pointColor = Vector3f(1f)
-        val ink = Ink(MicroscenerySettings.get(Settings.Ablation.SizeUM, 8f) * 0.5f, pointColor, null)
-        ink.spatial().let {
-            it.position = pos
-        }
-        scene.addChild(ink)
-        ink.spatial().updateWorld(false,true)
-
-        val posInStageSpace = stageSpaceManager.worldToStageSpace(ink.spatial().worldPosition())
-        val coerced = stageSpaceManager.hardware.hardwareDimensions().coercePosition(posInStageSpace, null, true)
-
-        if (posInStageSpace != coerced) {
-            //ink is out of stage space bounds, wiggle in protest
-            Wiggler(ink, 0.01f, 300)
-            scene.removeChild(ink)
-            return
-        }
-
-        //ink.spatial().position = ink.spatial().worldPosition()
-        stageSpaceManager.worldToStageSpace(ink.spatial())
-        ink.spatial().scale = Vector3f(1f)
-
-        scene.removeChild(ink)
-        stageSpaceManager.stageRoot.addChild(ink)
-    }
+//    fun placeAblationInk(pos: Vector3f){
+//        val pointColor = Vector3f(1f)
+//        val ink = Ink(MicroscenerySettings.get(Settings.Ablation.SizeUM, 8f) * 0.5f, pointColor, null)
+//        ink.spatial().let {
+//            it.position = pos
+//        }
+//        scene.addChild(ink)
+//        ink.spatial().updateWorld(false,true)
+//
+//        val posInStageSpace = stageSpaceManager.worldToStageSpace(ink.spatial().worldPosition())
+//        val coerced = stageSpaceManager.hardware.hardwareDimensions().coercePosition(posInStageSpace, null, true)
+//
+//        if (posInStageSpace != coerced) {
+//            //ink is out of stage space bounds, wiggle in protest
+//            Wiggler(ink, 0.01f, 300)
+//            scene.removeChild(ink)
+//            return
+//        }
+//
+//        //ink.spatial().position = ink.spatial().worldPosition()
+//        stageSpaceManager.worldToStageSpace(ink.spatial())
+//        ink.spatial().scale = Vector3f(1f)
+//
+//        scene.removeChild(ink)
+//        stageSpaceManager.stageRoot.addChild(ink)
+//    }
 
     override fun inputSetup() {
         super.inputSetup()
-        StageSpaceUI(stageSpaceManager).stageUI(this,inputHandler, msHub, listOf(
-            StageUICommand("load Stack 1",null){_,_ ->
-                zenMicroscope.debugStack(this.singleCZI)
-            },
-            StageUICommand("load Stack 2",null){_,_ ->
-                zenMicroscope.debugStack(this.crovWithoutHoles)
-            },
-            StageUICommand("ablateZen compose",null){_,_ ->
-                stageSpaceManager.ablationManager.composeAblation()
-            },
-            StageUICommand("ablateZen scrap",null){_,_ ->
-                stageSpaceManager.ablationManager.scrapAblation()
-            },
-            StageUICommand("ablateZen execute",null){_,_ ->
-                stageSpaceManager.ablationManager.executeAblation()
-            }
-        ))
-
-
-        val crossRay = CrossRayToPosBehavior(scene.activeObserver!!){
-            placeAblationInk(it)
-        }
-        inputHandler!!.addBehaviour("crossRay", crossRay)
-        inputHandler!!.addKeyBinding("crossRay","G")
+//        StageSpaceUI(stageSpaceManager).stageUI(this,inputHandler, msHub, listOf(
+//            StageUICommand("load Stack 1",null){_,_ ->
+//                zenMicroscope.debugStack(this.singleCZI)
+//            },
+//            StageUICommand("load Stack 2",null){_,_ ->
+//                zenMicroscope.debugStack(this.crovWithoutHoles)
+//            },
+//            StageUICommand("ablateZen compose",null){_,_ ->
+//                stageSpaceManager.ablationManager.composeAblation()
+//            },
+//            StageUICommand("ablateZen scrap",null){_,_ ->
+//                stageSpaceManager.ablationManager.scrapAblation()
+//            },
+//            StageUICommand("ablateZen execute",null){_,_ ->
+//                stageSpaceManager.ablationManager.executeAblation()
+//            }
+//        ))
+//
+//
+//        val crossRay = CrossRayToPosBehavior(scene.activeObserver!!){
+//            placeAblationInk(it)
+//        }
+//        inputHandler!!.addBehaviour("crossRay", crossRay)
+//        inputHandler!!.addKeyBinding("crossRay","G")
 
     }
 
