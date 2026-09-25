@@ -1,8 +1,9 @@
 
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version embeddedKotlinVersion
+    kotlin("jvm") version "2.2.10"
     application
 }
 
@@ -11,22 +12,24 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
-    maven("https://jitpack.io")
+    maven { url = uri("https://jitpack.io") }
     maven("https://maven.scijava.org/content/groups/public")
 }
+
+
 
 dependencies {
     // This should point to the most recent commit of scenery:jans-dirtier-branch
     // At the moment scenery:jans-dirtier-branch should be a merge of:
     // - jans-branch
-    // - fix/16bit-histogram
-    // - fix/windows-mouse-click-scroll
-    // - split-histogram-checkbox
-    // - improveDisplayRangeLimitsNaming
-    // - fix/attachment-order-in-dssdo-shaders
-    implementation("com.github.scenerygraphics:scenery:d2c7e737ad63b2ba7cb05c42c9c0e09acb6e63ca")
+    // - mitigate-apple-silicon-rendering-issue
+    //implementation("com.github.scenerygraphics:scenery:1c65e6cf6d210bb08afda02df2cde9a38d50b28b")
+    // local build version
+    implementation("com.github.scenerygraphics:scenery:1.0.0-beta-3")
+
 
     implementation("org.slf4j:slf4j-simple:2.0.17")
+    implementation("org.zeromq:jeromq:0.5.2")
     implementation(project(":core"))
     val withZenSysConCon: String? by project
     if(withZenSysConCon?.toBoolean() == true) {
@@ -43,6 +46,7 @@ dependencies {
     testImplementation("net.imagej:imagej")
     testImplementation("net.imagej:ij")
     testImplementation("net.imglib2:imglib2-ij")
+    implementation("org.jfree:jfreechart:1.5.4")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
     testImplementation("org.mockito:mockito-core:5.10.0")
@@ -57,14 +61,15 @@ tasks.test {
     useJUnitPlatform()
 }
 
-tasks{
-    withType<KotlinCompile> {
-        kotlinOptions.jvmTarget = "21"
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
     }
+}
 
-    withType<JavaCompile>().all {
-        targetCompatibility = "21"
-        sourceCompatibility = "21"
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_21
     }
 }
 

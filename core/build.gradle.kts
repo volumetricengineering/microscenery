@@ -1,5 +1,7 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    kotlin("jvm") version embeddedKotlinVersion
+    kotlin("jvm") version "2.2.10"
 }
 
 group = "me.jancasus"
@@ -59,7 +61,9 @@ java {
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions.jvmTarget = "1.8"
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_1_8
+    }
 }
 
 tasks{
