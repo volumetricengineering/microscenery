@@ -1,7 +1,6 @@
 package microscenery.simulation
 
 import graphics.scenery.numerics.OpenSimplexNoise
-import graphics.scenery.volumes.Volume.Companion.generateProceduralVolume
 import org.joml.Vector2i
 import org.joml.Vector3f
 import org.lwjgl.system.MemoryUtil

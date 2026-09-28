@@ -2,7 +2,7 @@ package microscenery.primitives
 
 import graphics.scenery.*
 import graphics.scenery.net.Networkable
-import graphics.scenery.utils.extensions.*
+import graphics.scenery.utils.extensions.minus
 import org.joml.Vector3f
 
 /**

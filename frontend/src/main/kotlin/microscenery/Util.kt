@@ -6,14 +6,12 @@ import graphics.scenery.RichNode
 import graphics.scenery.Scene
 import graphics.scenery.attribute.material.HasMaterial
 import graphics.scenery.controls.InputHandler
-import graphics.scenery.controls.OpenVRHMD
 import graphics.scenery.controls.behaviours.Touchable
 import graphics.scenery.ui.Column
 import graphics.scenery.ui.Row
 import graphics.scenery.ui.TextBox
 import org.joml.Vector3f
 import org.scijava.ui.behaviour.Behaviour
-import org.scijava.ui.behaviour.DragBehaviour
 import kotlin.concurrent.thread
 import kotlin.random.Random
 

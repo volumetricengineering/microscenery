@@ -3,7 +3,6 @@ package microscenery.signals
 import fromScenery.utils.extensions.minus
 import fromScenery.utils.extensions.plus
 import fromScenery.utils.extensions.times
-import org.withXR.network.v3.microscopeApi.EnumServerState
 import microscenery.signals.HardwareDimensions.Companion.toPoko
 import microscenery.signals.ImageMeta.Companion.toPoko
 import microscenery.signals.MicroscopeStatus.Companion.toPoko
@@ -11,6 +10,7 @@ import microscenery.toReadableString
 import org.joml.Vector2f
 import org.joml.Vector2i
 import org.joml.Vector3f
+import org.withXR.network.v3.microscopeApi.EnumServerState
 
 
 sealed class MicroscopeSignal {

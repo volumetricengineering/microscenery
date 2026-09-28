@@ -19,7 +19,7 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.17")
     implementation("org.slf4j:slf4j-simple:2.0.17")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
-    implementation("org.joml:joml:1.10.5")
+    implementation("org.joml:joml:1.10.8")
 //    if(System.getProperty("os.name").lowercase().contains("mac")) {
         implementation ("com.google.protobuf:protobuf-java:4.34.1") // current macOS homebrew version
 //    } else {

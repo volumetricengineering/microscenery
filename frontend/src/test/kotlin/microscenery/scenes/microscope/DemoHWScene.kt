@@ -5,7 +5,6 @@ import graphics.scenery.utils.extensions.times
 import microscenery.*
 import microscenery.UI.StageSpaceUI
 import microscenery.UI.UIModel
-import microscenery.signals.MicroscopeControlSignal
 import microscenery.simulation.AblationSimulationMicroscope
 import microscenery.stageSpace.MicroscopeLayout
 import microscenery.stageSpace.StageSpaceManager

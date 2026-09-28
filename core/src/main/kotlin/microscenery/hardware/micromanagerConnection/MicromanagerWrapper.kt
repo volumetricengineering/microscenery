@@ -6,13 +6,13 @@ import fromScenery.utils.extensions.minus
 import fromScenery.utils.extensions.plus
 import fromScenery.utils.extensions.times
 import fromScenery.utils.extensions.xy
-import org.withXR.network.v3.microscopeApi.MicroManagerSignal
 import microscenery.*
 import microscenery.hardware.MicroscopeHardwareAgent
 import microscenery.signals.*
 import org.joml.Vector2i
 import org.joml.Vector3f
 import org.lwjgl.system.MemoryUtil
+import org.withXR.network.v3.microscopeApi.MicroManagerSignal
 import java.nio.Buffer
 import java.nio.ByteBuffer
 import java.util.concurrent.ArrayBlockingQueue

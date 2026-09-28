@@ -4,7 +4,6 @@ import fromScenery.utils.extensions.minus
 import graphics.scenery.Sphere
 import graphics.scenery.attribute.material.Material
 import graphics.scenery.attribute.spatial.HasCustomSpatial
-import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.controls.behaviours.Grabable
 import graphics.scenery.controls.behaviours.Touchable
 import graphics.scenery.primitives.Cylinder

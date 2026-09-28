@@ -3,7 +3,6 @@ package microscenery.stageSpace
 import graphics.scenery.*
 import graphics.scenery.attribute.material.Material
 import graphics.scenery.attribute.spatial.HasCustomSpatial
-import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.attribute.spatial.Spatial
 import graphics.scenery.utils.extensions.minus
 import graphics.scenery.utils.extensions.plus

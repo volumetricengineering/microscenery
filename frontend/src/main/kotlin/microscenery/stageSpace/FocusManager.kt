@@ -7,7 +7,6 @@ import graphics.scenery.utils.extensions.times
 import microscenery.*
 import microscenery.UI.UIModel
 import org.joml.Vector3f
-import kotlin.math.absoluteValue
 
 class FocusManager(val stageSpaceManager: StageSpaceManager, val msHub: MicrosceneryHub) {
     private val stageSpaceModel = msHub.getAttribute(StageSpaceModel::class.java)

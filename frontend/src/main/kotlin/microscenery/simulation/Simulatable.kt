@@ -2,7 +2,6 @@ package microscenery.simulation
 
 import fromScenery.utils.extensions.times
 import graphics.scenery.attribute.spatial.HasCustomSpatial
-import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.attribute.spatial.Spatial
 import microscenery.copy
 import org.joml.Matrix4f

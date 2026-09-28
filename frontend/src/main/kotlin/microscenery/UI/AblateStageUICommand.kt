@@ -2,7 +2,6 @@ package microscenery.UI
 
 import graphics.scenery.Sphere
 import graphics.scenery.attribute.spatial.HasCustomSpatial
-import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.primitives.Cylinder
 import graphics.scenery.utils.extensions.minus
 import graphics.scenery.utils.extensions.times
