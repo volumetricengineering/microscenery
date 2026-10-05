@@ -13,7 +13,7 @@ import org.joml.Vector3f
 import kotlin.concurrent.thread
 
 
-class FileHWScene : DefaultScene(withSwingUI = false, VR = true) {
+class FileHWScene : DefaultScene(withSwingUI = false) {
     lateinit var stageSpaceManager: StageSpaceManager
     val msHub = MicrosceneryHub(hub)
 
@@ -21,7 +21,6 @@ class FileHWScene : DefaultScene(withSwingUI = false, VR = true) {
         MicroscenerySettings.set("Stage.precisionXY", 1f)
         MicroscenerySettings.set("Stage.precisionZ", 1f)
 
-        MicroscenerySettings.set(Settings.VRToolbox.PointAblationEnabled, true)
         MicroscenerySettings.set(Settings.StageSpace.ShowHullbox, true)
 
         val viewSettings = listOf(

@@ -20,11 +20,7 @@ class RappNeuroStack : DefaultScene("RappNeuroStack", width = 840, height = 840)
             Settings.StageSpace.viewMode to true,
             Settings.StageSpace.HideFocusFrame to true,
             Settings.StageSpace.HideFocusTargetFrame to true,
-            Settings.StageSpace.HideStageSpaceLabel to true,
-            Settings.VRToolbox.CroppingEnabled to true,
-            Settings.VRToolbox.MeasuringEnabled to true,
-            Settings.VRToolbox.PathAblationEnabled to true,
-            Settings.VRToolbox.PointAblationEnabled to true,
+            Settings.StageSpace.HideStageSpaceLabel to true
         )
         setts.forEach { MicroscenerySettings.set(it.first, it.second) }
         MicroscenerySettings.set(Settings.StageSpace.ShowHullbox, !atmosphere)

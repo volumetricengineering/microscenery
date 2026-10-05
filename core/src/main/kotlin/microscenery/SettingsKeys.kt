@@ -1,23 +1,6 @@
 package microscenery
 
 object Settings {
-    object VRToolbox {
-        const val AblationInkMoverEnabled: String = "VRToolBox.AblationInkMoverEnabled"
-        const val CroppingEnabled: String = "VRToolBox.CroppingEnabled"
-        const val PathAblationEnabled = "VRToolBox.PathAblationEnabled"
-        const val PointAblationEnabled: String = "VRToolBox.PointAblationEnabled"
-        const val BubblesEnabled: String= "VRToolBox.BubblesEnabled"
-        const val OptionsEnabled: String = "VRToolBox.OptionsEnabled"
-        const val ColorChooserEnabled: String = "VRToolBox.ColorChooserEnabled"
-        const val MeasuringEnabled: String = "VRToolBox.MeasuringEnabled"
-    }
-
-    object VRUI {
-        /** bool */ const val LockRotationDefault: String = "VRUI.lockRotationDefault"
-        const val LeftHandMenuFixedPosition: String = "VRUI.leftHandMenuFixedPosition"
-        const val TeleportEnabled = "VRUI.teleportEnabled"
-        /** bool */ const val DominantHandRight = "VRUI.dominantHandRight"
-    }
 
     object Ablation {
         object PointTool {
