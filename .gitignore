@@ -9,7 +9,7 @@
 .idea/
 *.iml
 *.ipr
-models/
+testData/
 
 # CMake
 cmake-build-*/

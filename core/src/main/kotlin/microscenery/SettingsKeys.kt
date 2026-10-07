@@ -75,6 +75,12 @@ object Settings {
          * overwrites the exposure time extracted from the first extracted .czexp
          * */ const val exposureTime = "ZenMicroscope.exposureTime"
         /** int */ const val readChannel = "ZenMicroscope.readChannel"
+        /** bool
+         * false (default): the experiment has to consist of exactly one activated imaging block.
+         * true: the first activated block has to be a valid imaging block and can be followed by arbitrary blocks.
+         * Only the first block is used and adapted for imaging and ablation. The following blocks are kept as they are
+         * for ablation experiments (follow-up experiments) and deactivated for imaging experiments.
+         */ const val customFollowUpExperimentBlocks = "ZenMicroscope.customFollowUpExperimentBlocks"
         /** float */ const val debugBleachingImageOffsetFactorStageCooridnates = "ZenMicroscope.debugBleachingImageOffsetFactorStageCooridnates"
         /** float */ const val debugBleachingImageOffsetFactorPixelCooridnates = "ZenMicroscope.debugBleachingImageOffsetFactorPixelCooridnates"
     }
