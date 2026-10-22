@@ -147,7 +147,8 @@ data class Stack(
     val to: Vector3f,
     val slicesCount: Int,
     val created: Long,
-    val imageMeta: ImageMeta
+    val imageMeta: ImageMeta,
+    val channelId: Int = 0
 ) : BaseServerSignal.DataAvailableSignal() {
     override fun toProtoIntern(): org.withXR.network.v3.DataAvailableSignal {
         val microscopeSignal = org.withXR.network.v3.DataAvailableSignal.newBuilder()
@@ -160,6 +161,7 @@ data class Stack(
         s.slicesCount = this.slicesCount
         s.relatedToId = -1
         s.imageMeta = this.imageMeta.toProto()
+        s.channelId = this.channelId
         s.build()
 
         return microscopeSignal.build()
