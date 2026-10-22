@@ -67,8 +67,6 @@ sealed class MicroscopeControlSignal {
         override fun toProto(): org.withXR.network.v3.microscopeApi.MicroscopeControlSignal {
             val cs = org.withXR.network.v3.microscopeApi.MicroscopeControlSignal.newBuilder()
             val b = cs.ablationPointsBuilder
-            b.dwellTime = dwellTime
-            b.laserPower = laserPower
             b.addAllPoints(points.map { it.toProto() })
             b.build()
             return cs.build()
