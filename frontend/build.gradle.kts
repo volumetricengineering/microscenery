@@ -24,6 +24,16 @@ dependencies {
     // local build version
     implementation("com.github.scenerygraphics:scenery:1.0.0-beta-3")
 
+    if(!System.getProperty("os.name").lowercase().contains("mac"))  {
+        // aka. we are on windows machine and want to do mm work
+        implementation ("com.google.protobuf:protobuf-java:3.25.3") // I think this one was still compatible with micromanager
+        configurations.all { // this is needed because scenery brings its own proto version -.-
+            resolutionStrategy {
+                force("com.google.protobuf:protobuf-java:3.25.3")
+                force("com.google.protobuf:protobuf-java-util:3.25.3")
+            }
+        }
+    }
 
     implementation("org.slf4j:slf4j-simple:2.0.17")
     implementation("org.zeromq:jeromq:0.5.2")
@@ -114,4 +124,19 @@ tasks{
                 }
             }
         }
+
+
+}
+
+// fix to long class path errors for generated distribution .bat
+tasks.named<CreateStartScripts>("startScripts") {
+    doLast {
+        val windowsScriptFile = file(windowsScript)
+        windowsScriptFile.writeText(
+            windowsScriptFile.readText().replace(
+                Regex("(?m)^set CLASSPATH=.*"),
+                "set CLASSPATH=%APP_HOME%\\\\lib\\\\*"
+            )
+        )
+    }
 }
