@@ -70,6 +70,10 @@ class MicromanagerWrapper(
     fun updateStageLimitsFromSettings() {
         val stageMin = MicroscenerySettings.getVector3(Settings.Stage.Limits.Min, stagePosition)!!
         val stageMax = MicroscenerySettings.getVector3(Settings.Stage.Limits.Max, stagePosition)!!
+		updateStageLimits(stageMin,stageMax)
+    }
+
+    fun updateStageLimits( stageMin: Vector3f,  stageMax: Vector3f ){
         if (stageMin.x > stageMax.x || stageMin.y > stageMax.y || stageMin.z > stageMax.z) {
             throw IllegalArgumentException("Min allowed stage area parameters need to be smaller than max values")
         }
@@ -290,6 +294,8 @@ class MicromanagerWrapper(
             }
 
             HardwareCommand.StartAcquisition -> mmStudioConnector.startAcquisition()
+
+            null -> {}
         }
     }
 
