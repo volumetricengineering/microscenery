@@ -33,7 +33,7 @@ class ControlSignalsServer(
 
     private val socket: ZMQ.Socket
 
-    private val signalsOut = ArrayBlockingQueue<org.withXR.network.v3.BaseServerSignal>(1000)
+    private val signalsOut = ArrayBlockingQueue<org.withXR.network.v3.BaseServerSignal>(10000)
     private val signalsIn = event<BaseClientSignal>()
 
     private val clients = mutableSetOf<ByteArray>()
