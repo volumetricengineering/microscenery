@@ -46,7 +46,7 @@ class ControlSignalsClient(
             throw IllegalStateException("Could not connect to ${ControlSignalsClient::class.simpleName} connected to tcp://${host}:${port}")
         }
 
-        signalsOut += BaseClientSignal.ClientSignOn.toProto()
+        signalsOut += BaseClientSignal.ClientSignOn().toProto()
 
         startAgent()
     }

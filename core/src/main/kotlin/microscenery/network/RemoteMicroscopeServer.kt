@@ -108,8 +108,10 @@ class RemoteMicroscopeServer @JvmOverloads constructor(
      */
     private fun processClientSignal(bcs: BaseClientSignal) {
         when (bcs) {
-            BaseClientSignal.ClientSignOn -> {
+            is BaseClientSignal.ClientSignOn -> {
                 controlConnection.sendSignal(serverHello)
+                if (bcs.isProbe) return // probes only get a server hello
+
                 status = status.copy(connectedClients = status.connectedClients + 1)
                 sendBaseWrappedSignal(ActualMicroscopeSignal(microscope.hardwareDimensions()), isResend = true)
                 sendBaseWrappedSignal(ActualMicroscopeSignal(microscope.status()), isResend = true)

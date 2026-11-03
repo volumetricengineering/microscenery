@@ -21,7 +21,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
     implementation("org.joml:joml:1.10.8")
     if(System.getProperty("os.name").lowercase().contains("mac")) {
-        implementation ("com.google.protobuf:protobuf-java:4.34.1") // current macOS homebrew version
+        implementation ("com.google.protobuf:protobuf-java:4.35.1") // current macOS homebrew version
     } else {
         implementation ("com.google.protobuf:protobuf-java:3.25.3") // I think this one was still compatible with micromanager
         configurations.all { // this is needed because scenery brings its own proto version -.-
