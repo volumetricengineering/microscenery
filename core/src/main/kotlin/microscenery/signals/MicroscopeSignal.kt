@@ -4,34 +4,31 @@ import fromScenery.utils.extensions.minus
 import fromScenery.utils.extensions.plus
 import fromScenery.utils.extensions.times
 import microscenery.signals.HardwareDimensions.Companion.toPoko
-import microscenery.signals.ImageMeta.Companion.toPoko
 import microscenery.signals.MicroscopeStatus.Companion.toPoko
 import microscenery.toReadableString
-import org.joml.Vector2f
-import org.joml.Vector2i
 import org.joml.Vector3f
-import org.withXR.network.v3.microscopeApi.EnumServerState
+import org.withXR.network.v4.microscopeApi.EnumServerState
 
 
 sealed class MicroscopeSignal {
 
-    abstract fun toProto(): org.withXR.network.v3.microscopeApi.MicroscopeSignal
+    abstract fun toProto(): org.withXR.network.v4.microscopeApi.MicroscopeSignal
 
     companion object {
-        fun org.withXR.network.v3.microscopeApi.MicroscopeSignal.toPoko() =
+        fun org.withXR.network.v4.microscopeApi.MicroscopeSignal.toPoko() =
             when (this.signalCase ?: throw IllegalArgumentException("Illegal payload")) {
-                org.withXR.network.v3.microscopeApi.MicroscopeSignal.SignalCase.STATUS -> {
+                org.withXR.network.v4.microscopeApi.MicroscopeSignal.SignalCase.STATUS -> {
                     this.status.toPoko()
                 }
 
-                org.withXR.network.v3.microscopeApi.MicroscopeSignal.SignalCase.SIGNAL_NOT_SET ->
+                org.withXR.network.v4.microscopeApi.MicroscopeSignal.SignalCase.SIGNAL_NOT_SET ->
                     throw IllegalArgumentException("Signal is not set in Server signal message")
 
-                org.withXR.network.v3.microscopeApi.MicroscopeSignal.SignalCase.HARDWAREDIMENSIONS -> {
+                org.withXR.network.v4.microscopeApi.MicroscopeSignal.SignalCase.HARDWAREDIMENSIONS -> {
                     this.hardwareDimensions.toPoko()
                 }
 
-                org.withXR.network.v3.microscopeApi.MicroscopeSignal.SignalCase.ABLATIONRESULTS -> {
+                org.withXR.network.v4.microscopeApi.MicroscopeSignal.SignalCase.ABLATIONRESULTS -> {
                     val ar = this.ablationResults
                     AblationResults(ar.totalTimeMillis, ar.perPointTimeList)
                 }
@@ -40,80 +37,81 @@ sealed class MicroscopeSignal {
 }
 
 /** workaround for transitioning from v2 to v3 */
+data class MicroscopeDataset(val dataset: Dataset) : MicroscopeSignal() {
+    override fun toProto(): org.withXR.network.v4.microscopeApi.MicroscopeSignal {
+        TODO("Not yet implemented")
+    }
+}
+
+/** workaround for transitioning from v2 to v3 */
 data class MicroscopeStack(val stack: Stack) : MicroscopeSignal() {
-    override fun toProto(): org.withXR.network.v3.microscopeApi.MicroscopeSignal {
+    override fun toProto(): org.withXR.network.v4.microscopeApi.MicroscopeSignal {
         TODO("Not yet implemented")
     }
 }
 
 /** workaround for transitioning from v2 to v3 */
 data class MicroscopeSlice(val slice: Slice) : MicroscopeSignal() {
-    override fun toProto(): org.withXR.network.v3.microscopeApi.MicroscopeSignal {
+    override fun toProto(): org.withXR.network.v4.microscopeApi.MicroscopeSignal {
         TODO("Not yet implemented")
     }
 }
 
 /**
- * @param imageSize in pixel
- * @param vertexDiameter pixel to stage coord ratio
+ * Stage limits of the microscope. Image geometry (size, voxel size, numeric type) is described by [Dataset].
  */
 data class HardwareDimensions(
     val stageMin: Vector3f,
-    val stageMax: Vector3f,
-    val imageMeta: ImageMeta //having this here is a leftover from v2
+    val stageMax: Vector3f
 ) : MicroscopeSignal() {
 
-    val imageSize: Vector2i = imageMeta.imageSize
-    val vertexDiameter: Float = imageMeta.vertexDiameter
-    val numericType: NumericType = imageMeta.numericType
-
-    override fun toProto(): org.withXR.network.v3.microscopeApi.MicroscopeSignal {
-        val microscopeSignal = org.withXR.network.v3.microscopeApi.MicroscopeSignal.newBuilder()
+    override fun toProto(): org.withXR.network.v4.microscopeApi.MicroscopeSignal {
+        val microscopeSignal = org.withXR.network.v4.microscopeApi.MicroscopeSignal.newBuilder()
 
         val hd = microscopeSignal.hardwareDimensionsBuilder
         hd.stageMin = this.stageMin.toProto()
         hd.stageMax = this.stageMax.toProto()
-        hd.imageMeta = this.imageMeta.toProto()
         hd.build()
 
         return microscopeSignal.build()
     }
 
-    val byteSize
-        get() = imageSize.x * imageSize.y * numericType.bytes
-
     companion object {
-        val EMPTY = HardwareDimensions(Vector3f(), Vector3f(), ImageMeta.EMPTY)
+        val EMPTY = HardwareDimensions(Vector3f(), Vector3f())
 
-        fun org.withXR.network.v3.microscopeApi.HardwareDimensions.toPoko(): HardwareDimensions {
+        fun org.withXR.network.v4.microscopeApi.HardwareDimensions.toPoko(): HardwareDimensions {
             val hwd = this
             return HardwareDimensions(
                 hwd.stageMin.toPoko(),
-                hwd.stageMax.toPoko(),
-                hwd.imageMeta.toPoko()
+                hwd.stageMax.toPoko()
             )
         }
     }
 
     /**
      * Limits a position within the stage limits.
+     * @param imageSpaceOf if set, the limits are extended by half the image extent of this dataset in x and y.
      */
     fun coercePosition(
         target: Vector3f,
         logger: org.slf4j.Logger?,
-        inImageSpace: Boolean = false
+        imageSpaceOf: Dataset? = null
     ): Vector3f {
         val safeTarget = Vector3f()
 
-        val min = if (!inImageSpace)
+        val halfImageExtent = imageSpaceOf?.let {
+            Vector3f(it.dimensions.x * it.voxelSize.x, it.dimensions.y * it.voxelSize.y, 0f) * 0.5f
+        }
+
+        val min = if (halfImageExtent == null)
             stageMin
         else
-            stageMin - Vector3f(Vector2f(imageSize) * vertexDiameter * 0.5f, 0f)
+            stageMin - halfImageExtent
 
-        val max = if (!inImageSpace)
+        val max = if (halfImageExtent == null)
             stageMax
         else
-            stageMax + Vector3f(Vector2f(imageSize) * vertexDiameter * 0.5f, 0f)
+            stageMax + halfImageExtent
 
         for (i in 0..2) {
             safeTarget.setComponent(i, target[i].coerceIn(min[i], max[i]))
@@ -131,8 +129,8 @@ data class MicroscopeStatus(
     val stagePosition: Vector3f,
     val live: Boolean
 ) : MicroscopeSignal() {
-    override fun toProto(): org.withXR.network.v3.microscopeApi.MicroscopeSignal {
-        val microscopeSignal = org.withXR.network.v3.microscopeApi.MicroscopeSignal.newBuilder()
+    override fun toProto(): org.withXR.network.v4.microscopeApi.MicroscopeSignal {
+        val microscopeSignal = org.withXR.network.v4.microscopeApi.MicroscopeSignal.newBuilder()
 
         val status = microscopeSignal.statusBuilder
         status.state = this.state.toProto()
@@ -144,7 +142,7 @@ data class MicroscopeStatus(
     }
 
     companion object {
-        fun org.withXR.network.v3.microscopeApi.MicroscopeStatus.toPoko(): MicroscopeStatus {
+        fun org.withXR.network.v4.microscopeApi.MicroscopeStatus.toPoko(): MicroscopeStatus {
             val ss = this
             return MicroscopeStatus(
                 ss.state.toPoko(),
@@ -156,8 +154,8 @@ data class MicroscopeStatus(
 }
 
 data class AblationResults(val totalTimeMillis: Int, val perPointTime: List<Int>) : MicroscopeSignal() {
-    override fun toProto(): org.withXR.network.v3.microscopeApi.MicroscopeSignal {
-        val microscopeSignal = org.withXR.network.v3.microscopeApi.MicroscopeSignal.newBuilder()
+    override fun toProto(): org.withXR.network.v4.microscopeApi.MicroscopeSignal {
+        val microscopeSignal = org.withXR.network.v4.microscopeApi.MicroscopeSignal.newBuilder()
         val ar = microscopeSignal.ablationResultsBuilder
         ar.totalTimeMillis = totalTimeMillis
         ar.addAllPerPointTime(perPointTime)
