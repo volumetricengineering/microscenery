@@ -122,6 +122,30 @@ class BiggishDataTransmissionTest {
     }
 
     @Test
+    fun exactMultipleOfChunkSize() {
+        val dataSize = CHUNK_SIZE * 2
+        //increase storage size
+        reset()
+        init(4400,SliceStorage(CHUNK_SIZE * 3))
+
+        storage.addSlice(1, ByteBuffer.wrap(ByteArray(dataSize) { (it + 10).toByte() }))
+        assert(client.requestSlice(1, dataSize))
+        val slice = client.outputQueue.poll(10000, TimeUnit.MILLISECONDS)
+        assertNotNull(slice)
+        assertEquals(dataSize, slice.chunks.values.sumOf { it.size })
+
+        val buffer = MemoryUtil.memAlloc(slice.size)
+        slice.chunks.forEach {
+            buffer.put(it.value)
+        }
+        buffer.flip()
+
+        for (i in 0 until dataSize) {
+            assertEquals((i + 10).toByte(), buffer.get(), "at index $i")
+        }
+    }
+
+    @Test
     fun twice() {
         storage.addSlice(1, ByteBuffer.wrap(ByteArray(100) { it.toByte() }))
         storage.addSlice(2, ByteBuffer.wrap(ByteArray(100) { it.toByte() }))

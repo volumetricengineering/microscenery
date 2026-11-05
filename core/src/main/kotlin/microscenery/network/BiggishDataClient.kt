@@ -2,8 +2,8 @@ package microscenery.network
 
 import fromScenery.lazyLogger
 import microscenery.Agent
-import org.withXR.network.v3.ReplyHeaderSliceChunk
-import org.withXR.network.v3.RequestSliceChunk
+import org.withXR.network.v4.ReplyHeaderSliceChunk
+import org.withXR.network.v4.RequestSliceChunk
 import org.zeromq.SocketType
 import org.zeromq.ZContext
 import org.zeromq.ZFrame
@@ -45,7 +45,7 @@ class BiggishDataClient(zContext: ZContext, port: Int, host: String = "localhost
         startAgent()
     }
 
-    fun requestSlice(id: Int, size: Int): Boolean {
+    fun requestSlice(id: Long, size: Int): Boolean {
         val element = SliceChunkCollector(id, size)
 
         if (!requestQueue.offer(element, 5000, TimeUnit.MILLISECONDS)) {
@@ -72,13 +72,10 @@ class BiggishDataClient(zContext: ZContext, port: Int, host: String = "localhost
                     val reqBuilder = RequestSliceChunk.newBuilder()
                     reqBuilder.sliceId = openSlice.id
 
-                    reqBuilder.chunkSize = if (openSlice.requestedChunks == openSlice.numberOfChunks) {
-                        openSlice.size.rem(CHUNK_SIZE)
-                    } else {
-                        CHUNK_SIZE
-                    }
-
-                    reqBuilder.offset = (openSlice.requestedChunks - 1) * CHUNK_SIZE
+                    val offset = (openSlice.requestedChunks - 1).toLong() * CHUNK_SIZE
+                    // the last chunk takes the rest, which is a full chunk if size is a multiple of CHUNK_SIZE
+                    reqBuilder.chunkSize = (openSlice.size - offset).coerceAtMost(CHUNK_SIZE.toLong()).toInt()
+                    reqBuilder.offset = offset
                     dealer.send(reqBuilder.build().toByteArray())
                     credit--
                 }
@@ -118,14 +115,14 @@ class BiggishDataClient(zContext: ZContext, port: Int, host: String = "localhost
         dealer.close()
     }
 
-    class SliceChunkCollector(val id: Int, val size: Int) {
+    class SliceChunkCollector(val id: Long, val size: Int) {
         val numberOfChunks = if (size < CHUNK_SIZE) 1 else {
             size.floorDiv(CHUNK_SIZE) + if (size.rem(CHUNK_SIZE) > 0) 1 else 0
         }
         var requestedChunks = 0
 
         // key is offset
-        val chunks = ConcurrentSkipListMap<Int, ByteArray>()
+        val chunks = ConcurrentSkipListMap<Long, ByteArray>()
 
         fun isFull() = numberOfChunks == chunks.size
     }

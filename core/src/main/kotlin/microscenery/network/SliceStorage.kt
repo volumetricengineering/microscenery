@@ -18,15 +18,17 @@ class SliceStorage(val maxStorageSize: Int = MicroscenerySettings.get("Network.D
 
     private var currentlyStoredBytes = 0
 
-    private var storage = mapOf<Int, ByteBuffer>()
-    private val sliceTimestamps = ConcurrentSkipListMap<Long, Int>()
+    private var storage = mapOf<Long, ByteBuffer>()
+
+    /** key is [System.nanoTime] at insertion, value is the slice id */
+    private val sliceTimestamps = ConcurrentSkipListMap<Long, Long>()
 
     /**
      * Not thread save
      * Transfers the memory responsibility for [data] to this class.
      * Slice storage works on only on whole buffers. Position and limit are ignored!
      */
-    fun addSlice(id: Int, data: ByteBuffer) {
+    fun addSlice(id: Long, data: ByteBuffer) {
         if (maxStorageSize < data.capacity()) {
             logger.error(
                 "slice with id $id is could not be put in server storage since it exceeds the max storage " +
@@ -50,10 +52,10 @@ class SliceStorage(val maxStorageSize: Int = MicroscenerySettings.get("Network.D
         }
         storage = storage.plus(id to data)
         currentlyStoredBytes += data.capacity()
-        sliceTimestamps[System.currentTimeMillis()] = id
+        sliceTimestamps[System.nanoTime()] = id
     }
 
-    fun getSlice(id: Int): ByteBuffer? = storage[id]
+    fun getSlice(id: Long): ByteBuffer? = storage[id]
 
     fun newSlice(size: Int): ByteBuffer = MemoryUtil.memAlloc(size)
 

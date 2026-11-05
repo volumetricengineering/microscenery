@@ -15,7 +15,12 @@ import kotlin.properties.Delegates
 /**
  * Wraps an [MicroscopeHardware] and sends its output as [MicoscopeSignal]s wrapped in [BaseClientSignal].
  * Also puts captured slice data into [SliceStorage] to be requested by [BiggishDataClient].
- * @param acquireOnConnect tries to resend the last stack or trigger a new capture on client connect
+ *
+ * New clients get the live dataset (if any) and the last dataset in full: the [Dataset], the latest [Stack] of every
+ * channel and their [Slice]s.
+ *
+ * @param acquireOnConnect triggers a new capture on client connect if there is nothing to resend
+ * @param serverHello the [BaseServerSignal.ServerHello.sessionId] is replaced by [sessionId] before sending
  */
 @Suppress("MemberVisibilityCanBePrivate", "CanBeParameter")
 class RemoteMicroscopeServer @JvmOverloads constructor(
@@ -31,16 +36,27 @@ class RemoteMicroscopeServer @JvmOverloads constructor(
 ) : Agent(false) {
     private val logger by lazyLogger(System.getProperty("scenery.LogLevel", "info"))
 
-    private val controlConnection = ControlSignalsServer(zContext, basePort, host = host, listOf(this::processClientSignal))
+    /** All Dataset/Stack/Slice ids are only valid within this session. */
+    val sessionId = ControlSignalsServer.newSessionId()
+
+    private val controlConnection = ControlSignalsServer(
+        zContext, basePort, host = host, listOf(this::processClientSignal),
+        serverHello = { serverHello.copy(sessionId = sessionId) }
+    )
     val dataSender = BiggishDataServer(basePort + 1, host = host, storage, zContext)
     val bonjourService = if (announceWithBonjour) BonjourService() else null
 
-    private var lastStack: Stack? = null
-        set(value) {
-            lastStackSlices = emptyList()
-            field = value
-        }
-    private var lastStackSlices = emptyList<Slice>()
+    // ---- resend state, guarded by [resendLock] ----
+    private val resendLock = Any()
+    private val datasets = mutableMapOf<Long, Dataset>()
+    /** datasetId of the most recent standalone slice */
+    private var liveDatasetId = NO_ID
+    /** datasetId of the most recent stack */
+    private var lastDatasetId = NO_ID
+    /** latest stack per channel index of [lastDatasetId] */
+    private val lastStacks = mutableMapOf<Int, Stack>()
+    /** slice metadata (without data) of [lastStacks] by stack id */
+    private val lastStackSlices = mutableMapOf<Long, MutableList<Slice>>()
 
     var status: RemoteMicroscopeStatus by Delegates.observable(
         RemoteMicroscopeStatus(emptyList(), 0)
@@ -72,29 +88,28 @@ class RemoteMicroscopeServer @JvmOverloads constructor(
             else -> sendBaseWrappedSignal(ActualMicroscopeSignal(signal))
         }
     }
-    
+
     private fun sendBaseWrappedSignal(signal: RemoteMicroscopeSignal, isResend: Boolean = false){
         val wrapped = when (signal) {
             is RemoteMicroscopeStatus -> {
                 BaseServerSignal.AppSpecific(signal.toProto().toByteString())
             }
-            is ActualMicroscopeSignal -> when (signal.signal) {
+            is ActualMicroscopeSignal -> when (val s = signal.signal) {
+                is MicroscopeDataset -> {
+                    synchronized(resendLock) { datasets[s.dataset.Id] = s.dataset }
+                    s.dataset
+                }
                 is MicroscopeStack -> {
-                    lastStack = signal.signal.stack
-                    signal.signal.stack
+                    synchronized(resendLock) { rememberStack(s.stack) }
+                    s.stack
                 }
                 is MicroscopeSlice -> {
-                    val slice = signal.signal.slice
-                    if (slice.stackIdAndSliceIndex?.first == lastStack?.Id){
-                        lastStackSlices += slice
-                    }
-                    slice
-
+                    synchronized(resendLock) { rememberSlice(s.slice) }
+                    s.slice
                 }
                 else -> {
-                    if (signal.signal is HardwareDimensions && !isResend){
-                        lastStack = null
-                        lastStackSlices = emptyList()
+                    if (s is HardwareDimensions && !isResend){
+                        synchronized(resendLock) { forgetLastDataset() }
                     }
                     BaseServerSignal.AppSpecific(signal.toProto().toByteString())
                 }
@@ -103,32 +118,75 @@ class RemoteMicroscopeServer @JvmOverloads constructor(
         controlConnection.sendSignal(wrapped)
     }
 
+    /** needs [resendLock] */
+    private fun rememberStack(stack: Stack) {
+        if (stack.datasetId != lastDatasetId) {
+            forgetLastDataset()
+            lastDatasetId = stack.datasetId
+        }
+        lastStacks.put(stack.channelIndex, stack)?.let { replaced ->
+            lastStackSlices.remove(replaced.Id)
+        }
+        lastStackSlices[stack.Id] = mutableListOf()
+    }
+
+    /** needs [resendLock] */
+    private fun rememberSlice(slice: Slice) {
+        if (slice.isStandalone) {
+            liveDatasetId = slice.datasetId
+        } else {
+            lastStackSlices[slice.stackId]?.add(slice)
+        }
+    }
+
+    /** needs [resendLock] */
+    private fun forgetLastDataset() {
+        lastDatasetId = NO_ID
+        lastStacks.clear()
+        lastStackSlices.clear()
+    }
+
+    /**
+     * Sends the live dataset and the last dataset in full. In order: Dataset, Stacks, Slices.
+     * @return false if there was no stack to resend
+     */
+    private fun resendData(): Boolean {
+        val toSend = mutableListOf<BaseServerSignal>()
+        synchronized(resendLock) {
+            if (liveDatasetId != NO_ID && liveDatasetId != lastDatasetId) {
+                datasets[liveDatasetId]?.let { toSend += it }
+            }
+            if (lastStacks.isNotEmpty()) {
+                datasets[lastDatasetId]?.let { toSend += it }
+                    ?: logger.warn("Dataset $lastDatasetId of the last stacks is unknown.")
+                val stacks = lastStacks.values.sortedBy { it.channelIndex }
+                toSend += stacks
+                stacks.forEach { stack -> lastStackSlices[stack.Id]?.let { toSend += it } }
+            }
+        }
+        if (toSend.isNotEmpty()) logger.info("Resending ${toSend.size} data signals for new client")
+        toSend.forEach(controlConnection::sendSignal)
+        return synchronized(resendLock) { lastStacks.isNotEmpty() }
+    }
+
     /**
      * Executed by the network thread of [ControlSignalsServer]
      */
     private fun processClientSignal(bcs: BaseClientSignal) {
         when (bcs) {
             is BaseClientSignal.ClientSignOn -> {
-                controlConnection.sendSignal(serverHello)
-                if (bcs.isProbe) return // probes only get a server hello
-
+                // the hello and the version check are done by [ControlSignalsServer]
                 status = status.copy(connectedClients = status.connectedClients + 1)
                 sendBaseWrappedSignal(ActualMicroscopeSignal(microscope.hardwareDimensions()), isResend = true)
                 sendBaseWrappedSignal(ActualMicroscopeSignal(microscope.status()), isResend = true)
-                if (acquireOnConnect){
-                    lastStack?.let { stack ->
-                        logger.info("Resending last stack for new client")
-                        controlConnection.sendSignal(stack)
-                        lastStackSlices.forEach(controlConnection::sendSignal)
-                    } ?: run {
-                        logger.info("No previous stack found, acquiring new stack for new client.")
-                        microscope.acquireStack(MicroscopeControlSignal.AcquireStack(Vector3f(), Vector3f(), 1f))
-                    }
+                if (!resendData() && acquireOnConnect) {
+                    logger.info("No previous stack found, acquiring new stack for new client.")
+                    microscope.acquireStack(MicroscopeControlSignal.AcquireStack(Vector3f(), Vector3f(), 1f))
                 }
             }
 
             is BaseClientSignal.AppSpecific -> {
-                val it = org.withXR.network.v3.microscopeApi.MicroscopeControlSignal.parseFrom(bcs.data).toPoko()
+                val it = org.withXR.network.v4.microscopeApi.MicroscopeControlSignal.parseFrom(bcs.data).toPoko()
                 when (it) {
                     is MicroscopeControlSignal.AcquireStack -> {
                         microscope.acquireStack(it)

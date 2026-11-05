@@ -4,8 +4,8 @@ import fromScenery.lazyLogger
 import microscenery.Agent
 import microscenery.MicroscenerySettings
 import microscenery.Settings
-import org.withXR.network.v3.ReplyHeaderSliceChunk
-import org.withXR.network.v3.RequestSliceChunk
+import org.withXR.network.v4.ReplyHeaderSliceChunk
+import org.withXR.network.v4.RequestSliceChunk
 import org.zeromq.SocketType
 import org.zeromq.ZContext
 import org.zeromq.ZFrame
@@ -64,8 +64,9 @@ class BiggishDataServer(val port: Int, host: String, private val storage: SliceS
         }
         replyBuilder.sliceAvailable = true
 
+        val skip = (sliceOffset + request.offset).coerceIn(0L, data.remaining().toLong()).toInt()
         // this cast has to be done to be compatible with JDK 8
-        (data as Buffer).position(data.position() + (sliceOffset + request.offset).coerceAtMost(data.remaining()))
+        (data as Buffer).position(data.position() + skip)
         val size = request.chunkSize.coerceAtMost(data.remaining()).coerceAtMost(CHUNK_SIZE)
 
         //OPTIMIZATION POTENTIAL: introduce ring buffer or something to avoid creating new buffers constantly. Check out what ZFrame.destroy does.

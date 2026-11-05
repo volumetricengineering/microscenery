@@ -19,8 +19,7 @@ import java.util.concurrent.Semaphore
 class RemoteMicroscopeClient(
     basePort: Int = MicroscenerySettings.get(Settings.Network.BasePort, 4000),
     host: String = MicroscenerySettings.get(Settings.Network.Host, "localhost"),
-    val zContext: ZContext,
-    val nonMicroscopeMode: Boolean = false
+    val zContext: ZContext
 ) : MicroscopeHardwareAgent() {
     private val logger by lazyLogger(System.getProperty("scenery.LogLevel", "info"))
 
@@ -89,25 +88,14 @@ class RemoteMicroscopeClient(
 
                     is MicroscopeStatus -> {
                         if (microscopeSignal.state == ServerState.SHUTTING_DOWN) {
-                            controlConnection.close()
-                            sliceRequester.close()
-                            this.close()
+                            disconnect()
                         }
                         status = microscopeSignal
                     }
 
-                    is MicroscopeStack ->{
-                        if (nonMicroscopeMode && status.state == ServerState.STARTUP){
-                            hardwareDimensions = HardwareDimensions(
-                                Vector3f(-100f), Vector3f(100f),microscopeSignal.stack.imageMeta)
-                            status = status.copy(state = ServerState.MANUAL)
-                        }
-                        output.put(microscopeSignal)
-                    }
-
                     else -> {
-                        if (microscopeSignal is MicroscopeSlice && microscopeSignal.slice.stackIdAndSliceIndex != null)
-                            logger.info("Got slice ${microscopeSignal.slice.stackIdAndSliceIndex.second} of stackIndex ${microscopeSignal.slice.stackIdAndSliceIndex.first}")
+                        if (microscopeSignal is MicroscopeSlice && !microscopeSignal.slice.isStandalone)
+                            logger.info("Got slice ${microscopeSignal.slice.stackSliceIndex} of stack ${microscopeSignal.slice.stackId}")
                         output.put(microscopeSignal)
                     }
                 }
@@ -118,25 +106,40 @@ class RemoteMicroscopeClient(
     private fun unwrapToRemoteMicroscopeSignal(signal: BaseServerSignal) = when (signal) {
         is BaseServerSignal.AppSpecific -> {
             val data = signal.data
-            val rms = org.withXR.network.v3.microscopeApi.RemoteMicroscopeSignal.parseFrom(data)
+            val rms = org.withXR.network.v4.microscopeApi.RemoteMicroscopeSignal.parseFrom(data)
             rms.toPoko()
         }
 
+        is Dataset -> ActualMicroscopeSignal(MicroscopeDataset(signal))
         is Slice -> ActualMicroscopeSignal(MicroscopeSlice(signal))
         is Stack -> ActualMicroscopeSignal(MicroscopeStack(signal))
         is BaseServerSignal.ServerHello -> {
             logger.info("Connected server says hello: $signal")
+            if (!signal.isCompatible) {
+                logger.error("Incompatible server protocol version theirs: ${signal.protocolVersion}, our ${PROTOCOL_VERSION.toInt()}. Disconnecting.")
+                disconnect()
+            }
             null
         }
     }
 
+    /**
+     * Sends a shutdown command to the remote microscope and disconnects.
+     */
     @Suppress("unused")
     override fun shutdown() {
         logger.info("Got Stop Command")
-        close()
+        sendBaseWrappedSignal(MicroscopeControlSignal.Shutdown)
+        disconnect()
     }
 
-    override fun onClose() {
-        sendBaseWrappedSignal(MicroscopeControlSignal.Shutdown)
+    /**
+     * Closes the connections. Does not shut down the remote microscope.
+     *
+     * Not [close] since this agent is never started and [close] would fail on the missing thread.
+     */
+    private fun disconnect() {
+        controlConnection.close()
+        sliceRequester.close()
     }
 }

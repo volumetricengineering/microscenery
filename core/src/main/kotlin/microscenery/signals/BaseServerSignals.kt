@@ -92,14 +92,14 @@ sealed class BaseServerSignal {
      * Self identification message that will be send to new clients.
      * @param serverName be careful with special characters. This variable is also the bonjour name which prefers plain letters.
      * @param sessionId random non-zero value chosen at server start. All Dataset/Stack/Slice IDs
-     * are only valid within this session.
+     * are only valid within this session. Servers stamp their own session id in before sending.
      * @param protocolVersion protocol version of the server. Peers using a v3 or older library send 0.
      */
     data class ServerHello(
         val serverName: String,
         val serverType: ServerType,
         val subType: String,
-        val sessionId: Long,
+        val sessionId: Long = NO_ID,
         val protocolVersion: Int = PROTOCOL_VERSION
     ) : BaseServerSignal() {
 

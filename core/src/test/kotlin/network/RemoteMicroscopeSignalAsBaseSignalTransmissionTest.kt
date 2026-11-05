@@ -6,7 +6,6 @@ import microscenery.network.ControlSignalsServer
 import microscenery.signals.*
 import microscenery.signals.MicroscopeControlSignal.Companion.toMicroscopeControlSignal
 import microscenery.signals.RemoteMicroscopeSignal.Companion.toRemoteMicroscopeSignal
-import org.joml.Vector2i
 import org.joml.Vector3f
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -65,9 +64,7 @@ class RemoteMicroscopeSignalAsBaseSignalTransmissionTest {
         assertNotNull(lastClientBaseSignal is BaseClientSignal.ClientSignOn)
         assert(lastSignalServer == null)
 
-        val outHwd = HardwareDimensions(
-            Vector3f(1f, 2f, 3f), Vector3f(2f), ImageMeta(Vector2i(20), 0.4f, NumericType.INT16)
-        )
+        val outHwd = HardwareDimensions(Vector3f(1f, 2f, 3f), Vector3f(2f))
         server.sendSignal(ActualMicroscopeSignal(outHwd).toBaseSignal())
 
         lightSleepOnNull { lastSignalServer }
@@ -78,7 +75,6 @@ class RemoteMicroscopeSignalAsBaseSignalTransmissionTest {
         assert(outHwd !== inHwd) // check that is not simply the same object
         assertEquals(outHwd.stageMax, inHwd.stageMax)
         assertEquals(outHwd.stageMin, inHwd.stageMin)
-        assertEquals(outHwd.numericType, inHwd.numericType)
 
     }
 

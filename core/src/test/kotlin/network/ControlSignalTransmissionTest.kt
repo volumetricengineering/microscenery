@@ -6,11 +6,18 @@ import microscenery.network.ControlSignalsClient
 import microscenery.network.ControlSignalsServer
 import microscenery.signals.BaseClientSignal
 import microscenery.signals.BaseServerSignal
+import microscenery.signals.BaseServerSignal.Companion.toPoko
+import microscenery.signals.NO_ID
+import microscenery.signals.PROTOCOL_VERSION
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import org.zeromq.SocketType
 import org.zeromq.ZContext
+import org.zeromq.ZMQ
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class ControlSignalTransmissionTest {
 
@@ -35,6 +42,16 @@ class ControlSignalTransmissionTest {
         ctx = ZContext()
     }
 
+    /** a raw socket sending [signOn] and returning the reply of the server */
+    private fun rawSignOn(signOn: BaseClientSignal.ClientSignOn): Pair<ZMQ.Socket, BaseServerSignal?> {
+        val socket = ctx.createSocket(SocketType.DEALER)
+        socket.receiveTimeOut = 5000
+        socket.connect("tcp://localhost:11543")
+        socket.send(signOn.toProto().toByteArray())
+        val reply = socket.recv()?.let { org.withXR.network.v4.BaseServerSignal.parseFrom(it).toPoko() }
+        return socket to reply
+    }
+
     @Test
     fun signOn() {
         lightSleepOnNull { lastClientBaseSignal }
@@ -42,9 +59,45 @@ class ControlSignalTransmissionTest {
     }
 
     @Test
+    fun helloOnSignOn() {
+        lightSleepOnNull { client.serverHello }
+        val hello = assertNotNull(client.serverHello)
+        assertEquals(PROTOCOL_VERSION, hello.protocolVersion)
+        assertNotEquals(NO_ID, hello.sessionId)
+    }
+
+    @Test
+    fun incompatibleClientIsRejected() {
+        lightSleepOnNull { lastClientBaseSignal }
+        lastClientBaseSignal = null
+
+        val (socket, reply) = rawSignOn(BaseClientSignal.ClientSignOn(protocolVersion = 0))
+        assertNotNull(reply as? BaseServerSignal.ServerHello)
+
+        socket.send(BaseClientSignal.AppSpecific(ByteString.copyFromUtf8("ignored")).toProto().toByteArray())
+        Thread.sleep(1000)
+        assertNull(lastClientBaseSignal)
+        socket.close()
+    }
+
+    @Test
+    fun probeOnlyGetsHello() {
+        lightSleepOnNull { lastClientBaseSignal }
+        lastClientBaseSignal = null
+
+        val (socket, reply) = rawSignOn(BaseClientSignal.ClientSignOn(isProbe = true))
+        assertNotNull(reply as? BaseServerSignal.ServerHello)
+        Thread.sleep(1000)
+        assertNull(lastClientBaseSignal)
+        socket.close()
+    }
+
+    @Test
     fun appSpecificClientToServer() {
         lightSleepOnNull { lastClientBaseSignal }
         assertNotNull(lastClientBaseSignal as? BaseClientSignal.ClientSignOn)
+        // wait for the hello so it doesn't race with the signal below
+        lightSleepOnNull { client.serverHello }
 
         val payload = "HelloWorld"
         server.sendSignal(BaseServerSignal.AppSpecific(ByteString.copyFrom(payload.toByteArray())))

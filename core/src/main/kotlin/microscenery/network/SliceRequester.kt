@@ -15,6 +15,8 @@ import java.util.concurrent.TimeUnit
  *
  * All [BaseServerSignal]s are piped though untouched except [Slice] signals. Those are cached and their data is requested.
  * Once the data is there they also get piped downstream together with their data.
+ *
+ * If the server session changes (see [BaseServerSignal.ServerHello.sessionId]) all pending requests are dropped.
  */
 class SliceRequester(
     controlSignalsClient: ControlSignalsClient,
@@ -29,7 +31,8 @@ class SliceRequester(
         controlSignalsClient.zContext, controlSignalsClient.port + 1, controlSignalsClient.host
     )
 
-    private val requestedSlices = ConcurrentHashMap<Int, Slice>()
+    private val requestedSlices = ConcurrentHashMap<Long, Slice>()
+    private var sessionId: Long? = null
 
     init {
         listeners.forEach { addListener(it) }
@@ -48,14 +51,14 @@ class SliceRequester(
 
     override fun onLoop() {
         val sliceParts = dataConnection.outputQueue.poll(200, TimeUnit.MILLISECONDS) ?: return
-        val meta = requestedSlices[sliceParts.id]
+        val meta = requestedSlices.remove(sliceParts.id)
 
         if (meta == null) {
             logger.warn("Got data for slice ${sliceParts.id} but it was not requested.")
             return
         }
-        if (sliceParts.size != meta.size) {
-            logger.error("Size mismatch for slice ${sliceParts.id} ${sliceParts.size} vs ${meta.size}")
+        if (sliceParts.size.toLong() != meta.sizeBytes) {
+            logger.error("Size mismatch for slice ${sliceParts.id} ${sliceParts.size} vs ${meta.sizeBytes}")
         }
 
         val buffer = MemoryUtil.memAlloc(sliceParts.size)
@@ -74,9 +77,26 @@ class SliceRequester(
     private fun processServerSignal(signal: BaseServerSignal) {
         when (signal) {
             is Slice -> {
-                if (dataConnection.requestSlice(signal.Id, signal.size)) {
+                val size = try {
+                    Math.toIntExact(signal.sizeBytes)
+                } catch (_: ArithmeticException) {
+                    logger.error("Slice ${signal.Id} is too big to be requested (${signal.sizeBytes} bytes). Skipping it.")
+                    return
+                }
+                if (dataConnection.requestSlice(signal.Id, size)) {
                     // save signal for eventual data receiving
                     requestedSlices[signal.Id] = signal
+                }
+            }
+
+            is BaseServerSignal.ServerHello -> {
+                if (sessionId != null && sessionId != signal.sessionId) {
+                    logger.info("Server session changed. Dropping ${requestedSlices.size} pending slice requests.")
+                    requestedSlices.clear()
+                }
+                sessionId = signal.sessionId
+                synchronized(signalsIn) {
+                    signalsIn(signal)
                 }
             }
 

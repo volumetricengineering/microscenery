@@ -6,6 +6,7 @@ import microscenery.Agent
 import microscenery.signals.BaseClientSignal
 import microscenery.signals.BaseServerSignal
 import microscenery.signals.BaseServerSignal.Companion.toPoko
+import microscenery.signals.PROTOCOL_VERSION
 import org.zeromq.SocketType
 import org.zeromq.ZContext
 import org.zeromq.ZMQ
@@ -30,8 +31,13 @@ class ControlSignalsClient(
 
     private val socket: ZMQ.Socket
 
-    private val signalsOut = ArrayBlockingQueue<org.withXR.network.v3.BaseClientSignal>(1000)
+    private val signalsOut = ArrayBlockingQueue<org.withXR.network.v4.BaseClientSignal>(1000)
     private val signalsIn = event<BaseServerSignal>()
+
+    /** The last compatible hello of the server. Null until the handshake is done. */
+    @Volatile
+    var serverHello: BaseServerSignal.ServerHello? = null
+        private set
 
     init {
         listeners.forEach { addListener(it) }
@@ -76,11 +82,7 @@ class ControlSignalsClient(
         // process incoming messages first.
         // First frame in each message is the sender identity
         if (payloadIn != null) {
-            val event = org.withXR.network.v3.BaseServerSignal.parseFrom(payloadIn)
-
-            synchronized(signalsIn) {
-                signalsIn(event.toPoko())
-            }
+            processIncoming(org.withXR.network.v4.BaseServerSignal.parseFrom(payloadIn).toPoko())
         }
 
         // process outgoing messages
@@ -94,9 +96,39 @@ class ControlSignalsClient(
             Thread.sleep(200)
     }
 
-    override fun onClose() {
-        socket.linger = 0
-        socket.close()
+    private fun processIncoming(signal: BaseServerSignal) {
+        if (signal is BaseServerSignal.ServerHello) {
+            if (signal.isCompatible) {
+                serverHello = signal
+            } else {
+                logger.error(
+                    "Server speaks protocol version ${signal.protocolVersion} but this client speaks " +
+                            "$PROTOCOL_VERSION. Disconnecting."
+                )
+                serverHello = null
+                // forward the hello so higher layers can react, then disconnect
+                synchronized(signalsIn) { signalsIn(signal) }
+                close()
+                return
+            }
+        } else if (serverHello == null) {
+            logger.warn("Ignoring ${signal::class.simpleName} received before a compatible server hello.")
+            return
+        }
 
+        synchronized(signalsIn) {
+            signalsIn(signal)
+        }
+    }
+
+    override fun onClose() {
+        // flush signals queued before closing, e.g. a shutdown command
+        if (serverHello != null) {
+            generateSequence { signalsOut.poll() }.forEach { socket.send(it.toByteArray(), ZMQ.DONTWAIT) }
+            socket.linger = 500
+        } else {
+            socket.linger = 0
+        }
+        socket.close()
     }
 }
