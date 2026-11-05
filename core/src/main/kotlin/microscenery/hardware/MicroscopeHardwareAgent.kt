@@ -5,6 +5,7 @@ import microscenery.signals.*
 import org.joml.Vector3f
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.BlockingQueue
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.properties.Delegates
 
 /**
@@ -34,14 +35,16 @@ abstract class MicroscopeHardwareAgent : Agent(), MicroscopeHardware {
     ) { _, old, new ->
         if (old != new) output.put(hardwareDimensions)
     }
-    protected var imageMeta: ImageMeta by Delegates.observable(
-        ImageMeta.EMPTY.copy()
-    ) { _, old, new ->
-        hardwareDimensions = hardwareDimensions.copy(imageMeta = new)
-    }
-
     override fun status(): MicroscopeStatus = status
     override fun hardwareDimensions(): HardwareDimensions = hardwareDimensions
+
+    private val idCounter = AtomicLong(NO_ID)
+
+    /**
+     * Next id for a [Dataset], [Stack] or [Slice]. All share one id space. Ids are > 0 and unique for the
+     * lifetime of this object.
+     */
+    protected fun nextId(): Long = idCounter.incrementAndGet()
 
     /**
      * New stage position has to be announced in status in implementing method.

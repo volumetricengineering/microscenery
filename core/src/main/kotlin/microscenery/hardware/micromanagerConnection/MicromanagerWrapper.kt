@@ -11,8 +11,9 @@ import microscenery.hardware.MicroscopeHardwareAgent
 import microscenery.signals.*
 import org.joml.Vector2i
 import org.joml.Vector3f
+import org.joml.Vector3i
 import org.lwjgl.system.MemoryUtil
-import org.withXR.network.v3.microscopeApi.MicroManagerSignal
+import org.withXR.network.v4.microscopeApi.MicroManagerSignal
 import java.nio.Buffer
 import java.nio.ByteBuffer
 import java.util.concurrent.ArrayBlockingQueue
@@ -42,14 +43,19 @@ class MicromanagerWrapper(
     private var ablationThread: Thread? = null
     private var stagePositionPollingThread: Thread? = null
 
-    // for Slices and stacks
-    private var idCounter = 0
+    /** Pixel size in µm. Changes apply to the next [Dataset]. */
+    @Volatile
     var vertexDiameter = MicroscenerySettings.get(Settings.MMMicroscope.VertexDiameter, mmCoreConnector.pixelSizeUm)
-        set(value) {
-            field = value
-            hardwareDimensions =
-                hardwareDimensions.copy(imageMeta = hardwareDimensions.imageMeta.copy(vertexDiameter = value))
-        }
+
+    /** in pixels, see [updateImageSize] */
+    @Volatile
+    private var imageSize = Vector2i()
+
+    private val byteSize
+        get() = imageSize.x * imageSize.y * NUMERIC_TYPE.bytes
+
+    /** dataset of standalone (live/snapped) slices, see [liveDataset] */
+    private var liveDataset: Dataset? = null
 
     init {
         MicroscenerySettings.setIfUnset(Settings.Stage.Limits.OriginMoveProtection, true)
@@ -126,21 +132,14 @@ class MicromanagerWrapper(
     }
 
     /**
-     * Reads settings and image size to update hardware dimensions.
+     * Reads the image size from the camera. The next [Dataset] uses it.
      *
      * Takes one image with the microscope if none has be taken to make sure, image meta information are correctly set.
      */
     @Suppress("MemberVisibilityCanBePrivate")
     fun updateImageSize() {
         mmCoreConnector.initImageSize()
-        hardwareDimensions = hardwareDimensions.copy(
-            imageMeta = hardwareDimensions.imageMeta.copy(
-                imageSize = Vector2i(
-                    mmCoreConnector.width,
-                    mmCoreConnector.height
-                )
-            )
-        )
+        imageSize = Vector2i(mmCoreConnector.width, mmCoreConnector.height)
     }
 
     //############################## called from external threads ##############################
@@ -249,17 +248,56 @@ class MicromanagerWrapper(
      */
     @Suppress("unused")
     fun externalSnap(position: Vector3f, data: ByteBuffer) {
-        if (data.capacity() != hardwareDimensions.byteSize) updateImageSize()
-        val sliceSignal = Slice(
-            idCounter++,
-            System.currentTimeMillis(),
-            position,
-            hardwareDimensions.byteSize,
-            null,
-            hardwareDimensions.imageMeta,
-            data
+        if (data.capacity() != byteSize) updateImageSize()
+        output.put(MicroscopeSlice(standaloneSlice(position, data)))
+    }
+
+    /**
+     * The dataset for standalone (live/snapped) slices. Creates and emits a new one if there is none yet or if the
+     * geometry changed, e.g. because of a new ROI. Existing datasets are never mutated.
+     *
+     * Synchronized since [externalSnap] is called from external threads.
+     */
+    @Synchronized
+    private fun liveDataset(): Dataset {
+        val dimensions = Vector3i(imageSize.x, imageSize.y, 1)
+        val voxelSize = Vector3f(vertexDiameter)
+        liveDataset?.let {
+            if (it.dimensions == dimensions && it.voxelSize == voxelSize) return it
+        }
+
+        val dataset = Dataset(
+            Id = nextId(),
+            dimensions = dimensions,
+            voxelSize = voxelSize,
+            numericType = NUMERIC_TYPE,
+            from = Vector3f(),
+            to = Vector3f(),
+            channels = listOf(ChannelMetadata(active = true)),
+            physicalUnit = PhysicalUnit.UM,
+            timepointCount = 0,
+            sourceFormat = SourceFormat.LIVE,
+            displayName = "Live"
         )
-        output.put(MicroscopeSlice(sliceSignal))
+        liveDataset = dataset
+        output.put(MicroscopeDataset(dataset))
+        return dataset
+    }
+
+    /** Slice of the live dataset. Emits a new live dataset first if the geometry changed. */
+    private fun standaloneSlice(position: Vector3f, data: ByteBuffer): Slice {
+        val dataset = liveDataset()
+        return Slice(
+            Id = nextId(),
+            datasetId = dataset.Id,
+            channelIndex = 0,
+            stackId = NO_ID,
+            stackSliceIndex = 0,
+            created = nowMillis(),
+            stagePos = position,
+            sizeBytes = byteSize.toLong(),
+            data = data
+        )
     }
 
     //############################## end of called from external threads ##############################
@@ -314,7 +352,7 @@ class MicromanagerWrapper(
         }
 
         fun takeImage(): ByteBuffer {
-            val buf = MemoryUtil.memAlloc(hardwareDimensions.byteSize)
+            val buf = MemoryUtil.memAlloc(byteSize)
             (buf as Buffer).clear() // this cast has to be done to be compatible with JDK 8
             try {
                 mmCoreConnector.snapSlice(buf.asShortBuffer())
@@ -338,15 +376,22 @@ class MicromanagerWrapper(
             }
         }
 
-        val sliceSignal = Slice(
-            idCounter++,
-            System.currentTimeMillis(),
-            mmCoreConnector.stagePosition,
-            hardwareDimensions.byteSize,
-            hwCommand.stackIdAndSliceIndex,
-            hardwareDimensions.imageMeta,
-            buf
-        )
+        val target = hwCommand.target
+        val sliceSignal = if (target == null) {
+            standaloneSlice(mmCoreConnector.stagePosition, buf)
+        } else {
+            Slice(
+                Id = nextId(),
+                datasetId = target.datasetId,
+                channelIndex = 0,
+                stackId = target.stackId,
+                stackSliceIndex = target.sliceIndex,
+                created = nowMillis(),
+                stagePos = mmCoreConnector.stagePosition,
+                sizeBytes = byteSize.toLong(),
+                data = buf
+            )
+        }
         output.put(MicroscopeSlice(sliceSignal))
     }
 
@@ -357,15 +402,47 @@ class MicromanagerWrapper(
         val end = hardwareDimensions.coercePosition(meta.endPosition, logger)
         val dist = end - start
         val steps = (dist.length() / meta.stepSize).roundToInt()
-        val step = dist * (1f / steps)
+        // steps == 0 if start and end are (almost) equal. Avoid NaN in the dataset then.
+        val step = if (steps > 0) dist * (1f / steps) else Vector3f()
+
+        val dimensions = Vector3i(imageSize.x, imageSize.y, steps)
+        val voxelSize = Vector3f(
+            vertexDiameter,
+            vertexDiameter,
+            if (steps > 0) step.length() else meta.stepSize)
+        val series = hwCommand.series
+        // continue a live series only if the geometry is unchanged, otherwise start a new dataset
+        val (dataset, timepointIndex) = if (series != null
+            && series.dataset.dimensions == dimensions
+            && series.dataset.voxelSize == voxelSize
+            && series.dataset.from == start
+        ) {
+            series.dataset to series.timepointIndex
+        } else {
+            val newDataset = Dataset(
+                Id = nextId(),
+                dimensions = dimensions,
+                voxelSize = voxelSize,
+                numericType = NUMERIC_TYPE,
+                from = start,
+                // position of the last slice actually taken
+                to = start + (step * (steps - 1).coerceAtLeast(0).toFloat()),
+                channels = listOf(ChannelMetadata(active = true)),
+                physicalUnit = PhysicalUnit.UM,
+                timepointCount = if (meta.live) 0 else 1,
+                sourceFormat = SourceFormat.LIVE,
+                displayName = "Stack"
+            )
+            output.put(MicroscopeDataset(newDataset))
+            newDataset to 0
+        }
 
         val currentStack = Stack(
-            if (meta.id > 0) meta.id else idCounter++,
-            start,
-            end,
-            steps,
-            nowMillis(),
-            hardwareDimensions.imageMeta
+            Id = nextId(),
+            datasetId = dataset.Id,
+            channelIndex = 0,
+            timepointIndex = timepointIndex,
+            created = nowMillis()
         )
         output.put(MicroscopeStack(currentStack))
         status = status.copy(state = ServerState.STACK)
@@ -378,13 +455,16 @@ class MicromanagerWrapper(
                     true
                 )
             )
-            hardwareCommandsQueue.add(HardwareCommand.SnapImage(false, currentStack.Id to i))
+            hardwareCommandsQueue.add(
+                HardwareCommand.SnapImage(false, HardwareCommand.SliceTarget(dataset.Id, currentStack.Id, i))
+            )
         }
 
         if (hwCommand.signal.live) {
             addToCommandQueueIfNotStopped(
                 HardwareCommand.GenerateStackCommands(
-                    signal = meta.copy(id = currentStack.Id)
+                    signal = meta,
+                    series = HardwareCommand.StackSeries(dataset, timepointIndex + 1)
                 )
             )
         }
@@ -500,12 +580,26 @@ class MicromanagerWrapper(
             val safeTarget = hwd.coercePosition(target, logger)
         }
 
-        data class SnapImage(val live: Boolean, val stackIdAndSliceIndex: Pair<Int, Int>? = null) : HardwareCommand()
-        data class GenerateStackCommands(val signal: MicroscopeControlSignal.AcquireStack) : HardwareCommand()
+        /** @param target null for standalone slices of the live dataset */
+        data class SnapImage(val live: Boolean, val target: SliceTarget? = null) : HardwareCommand()
+
+        /** @param series set when continuing a live stack series with its next timepoint */
+        data class GenerateStackCommands(
+            val signal: MicroscopeControlSignal.AcquireStack,
+            val series: StackSeries? = null
+        ) : HardwareCommand()
         data class Sync(val lock: Semaphore) : HardwareCommand()
         object Stop : HardwareCommand()
         object Shutdown : HardwareCommand()
         data class AblatePoints(val points: List<MicroscopeControlSignal.AblationPoint>) : HardwareCommand()
         object StartAcquisition : HardwareCommand()
+
+        data class SliceTarget(val datasetId: Long, val stackId: Long, val sliceIndex: Int)
+        data class StackSeries(val dataset: Dataset, val timepointIndex: Int)
+    }
+
+    companion object {
+        /** Micro-Manager cameras deliver unsigned 16 bit images */
+        private val NUMERIC_TYPE = NumericType.UINT16
     }
 }
