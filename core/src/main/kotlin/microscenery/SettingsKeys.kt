@@ -74,7 +74,6 @@ object Settings {
         /** int
          * overwrites the exposure time extracted from the first extracted .czexp
          * */ const val exposureTime = "ZenMicroscope.exposureTime"
-        /** int */ const val readChannel = "ZenMicroscope.readChannel"
         /** bool
          * false (default): the experiment has to consist of exactly one activated imaging block.
          * true: the first activated block has to be a valid imaging block and can be followed by arbitrary blocks.
