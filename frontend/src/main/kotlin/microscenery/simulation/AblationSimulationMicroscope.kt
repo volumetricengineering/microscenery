@@ -22,14 +22,14 @@ class AblationSimulationMicroscope (
     var imgOrigin: Origin = Origin.Center
 ): MicroscopeHardwareAgent() {
     private val logger by lazyLogger(System.getProperty("scenery.LogLevel", "info"))
-
-    init {
-        MicroscenerySettings.setIfUnset(Settings.Ablation.SizeUM,153f)
-    }
-
     private var ablationPoints: List<MicroscopeControlSignal.AblationPoint> = emptyList()
 
+    /** datasets of the wrapped microscope, needed for the geometry of the slices */
+    private var datasets = emptyMap<Long, Dataset>()
+
+    // has to come after all property initializers, the agent thread uses them right away
     init {
+        MicroscenerySettings.setIfUnset(Settings.Ablation.SizeUM,153f)
         startAgent()
     }
 
@@ -43,9 +43,6 @@ class AblationSimulationMicroscope (
         ablationPoints = emptyList()
         microscope.stop()
     }
-
-    /** datasets of the wrapped microscope, needed for the geometry of the slices */
-    private var datasets = emptyMap<Long, Dataset>()
 
     override fun onLoop() {
         val signal = microscope.output.poll(200, TimeUnit.MILLISECONDS) ?: return
