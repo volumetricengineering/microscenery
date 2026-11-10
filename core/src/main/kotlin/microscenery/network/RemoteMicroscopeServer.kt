@@ -39,24 +39,29 @@ class RemoteMicroscopeServer @JvmOverloads constructor(
     /** All Dataset/Stack/Slice ids are only valid within this session. */
     val sessionId = ControlSignalsServer.newSessionId()
 
-    private val controlConnection = ControlSignalsServer(
-        zContext, basePort, host = host, listOf(this::processClientSignal),
-        serverHello = { serverHello.copy(sessionId = sessionId) }
-    )
-    val dataSender = BiggishDataServer(basePort + 1, host = host, storage, zContext)
-    val bonjourService = if (announceWithBonjour) BonjourService() else null
-
     // ---- resend state, guarded by [resendLock] ----
+    // declared before [controlConnection] because its network thread may call [processClientSignal] right away
     private val resendLock = Any()
     private val datasets = mutableMapOf<Long, Dataset>()
     /** datasetId of the most recent standalone slice */
     private var liveDatasetId = NO_ID
+    /** id of the most recently announced dataset */
+    private var latestDatasetId = NO_ID
+    /** datasets sent since the last client signed on. Others are sent before data referencing them. */
+    private val announcedDatasets = mutableSetOf<Long>()
     /** datasetId of the most recent stack */
     private var lastDatasetId = NO_ID
     /** latest stack per channel index of [lastDatasetId] */
     private val lastStacks = mutableMapOf<Int, Stack>()
     /** slice metadata (without data) of [lastStacks] by stack id */
     private val lastStackSlices = mutableMapOf<Long, MutableList<Slice>>()
+
+    private val controlConnection = ControlSignalsServer(
+        zContext, basePort, host = host, listOf(this::processClientSignal),
+        serverHello = { serverHello.copy(sessionId = sessionId) }
+    )
+    val dataSender = BiggishDataServer(basePort + 1, host = host, storage, zContext)
+    val bonjourService = if (announceWithBonjour) BonjourService() else null
 
     var status: RemoteMicroscopeStatus by Delegates.observable(
         RemoteMicroscopeStatus(emptyList(), 0)
@@ -95,17 +100,24 @@ class RemoteMicroscopeServer @JvmOverloads constructor(
                 BaseServerSignal.AppSpecific(signal.toProto().toByteString())
             }
             is ActualMicroscopeSignal -> when (val s = signal.signal) {
-                is MicroscopeDataset -> {
-                    synchronized(resendLock) { datasets[s.dataset.Id] = s.dataset }
-                    s.dataset
+                is MicroscopeDataset -> synchronized(resendLock) {
+                    datasets[s.dataset.Id] = s.dataset
+                    latestDatasetId = s.dataset.Id
+                    announcedDatasets += s.dataset.Id
+                    controlConnection.sendSignal(s.dataset)
+                    return
                 }
-                is MicroscopeStack -> {
-                    synchronized(resendLock) { rememberStack(s.stack) }
-                    s.stack
+                is MicroscopeStack -> synchronized(resendLock) {
+                    rememberStack(s.stack)
+                    announceDatasetIfNeeded(s.stack.datasetId)
+                    controlConnection.sendSignal(s.stack)
+                    return
                 }
-                is MicroscopeSlice -> {
-                    synchronized(resendLock) { rememberSlice(s.slice) }
-                    s.slice
+                is MicroscopeSlice -> synchronized(resendLock) {
+                    rememberSlice(s.slice)
+                    announceDatasetIfNeeded(s.slice.datasetId)
+                    controlConnection.sendSignal(s.slice)
+                    return
                 }
                 else -> {
                     if (s is HardwareDimensions && !isResend){
@@ -116,6 +128,20 @@ class RemoteMicroscopeServer @JvmOverloads constructor(
             }
         }
         controlConnection.sendSignal(wrapped)
+    }
+
+    /**
+     * Makes sure clients know the dataset before they get a stack or slice referencing it.
+     * needs [resendLock]
+     */
+    private fun announceDatasetIfNeeded(datasetId: Long) {
+        if (datasetId in announcedDatasets) return
+        val dataset = datasets[datasetId] ?: run {
+            logger.warn("Data references unknown dataset $datasetId.")
+            return
+        }
+        controlConnection.sendSignal(dataset)
+        announcedDatasets += datasetId
     }
 
     /** needs [resendLock] */
@@ -147,26 +173,32 @@ class RemoteMicroscopeServer @JvmOverloads constructor(
     }
 
     /**
-     * Sends the live dataset and the last dataset in full. In order: Dataset, Stacks, Slices.
+     * Sends the live dataset, the most recently announced dataset and the last dataset in full.
+     * In order: Datasets, Stacks, Slices.
+     * Datasets not resent here are announced lazily before data referencing them, see [announceDatasetIfNeeded].
      * @return false if there was no stack to resend
      */
-    private fun resendData(): Boolean {
+    private fun resendData(): Boolean = synchronized(resendLock) {
         val toSend = mutableListOf<BaseServerSignal>()
-        synchronized(resendLock) {
-            if (liveDatasetId != NO_ID && liveDatasetId != lastDatasetId) {
-                datasets[liveDatasetId]?.let { toSend += it }
-            }
-            if (lastStacks.isNotEmpty()) {
-                datasets[lastDatasetId]?.let { toSend += it }
-                    ?: logger.warn("Dataset $lastDatasetId of the last stacks is unknown.")
-                val stacks = lastStacks.values.sortedBy { it.channelIndex }
-                toSend += stacks
-                stacks.forEach { stack -> lastStackSlices[stack.Id]?.let { toSend += it } }
-            }
+        announcedDatasets.clear()
+
+        listOf(liveDatasetId, latestDatasetId)
+            .filter { it != NO_ID && it != lastDatasetId }
+            .distinct()
+            .forEach { id -> datasets[id]?.let { toSend += it; announcedDatasets += id } }
+
+        if (lastStacks.isNotEmpty()) {
+            datasets[lastDatasetId]?.let { toSend += it; announcedDatasets += lastDatasetId }
+                ?: logger.warn("Dataset $lastDatasetId of the last stacks is unknown.")
+            val stacks = lastStacks.values.sortedBy { it.channelIndex }
+            toSend += stacks
+            stacks.forEach { stack -> lastStackSlices[stack.Id]?.let { toSend += it } }
         }
+
         if (toSend.isNotEmpty()) logger.info("Resending ${toSend.size} data signals for new client")
+        // sent within the lock so no data of the agent thread can overtake the resent datasets
         toSend.forEach(controlConnection::sendSignal)
-        return synchronized(resendLock) { lastStacks.isNotEmpty() }
+        lastStacks.isNotEmpty()
     }
 
     /**

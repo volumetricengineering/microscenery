@@ -117,4 +117,60 @@ class RemoteMicroscopeServerTest {
         val expected = listOf(dataset, stack0, stack1) + slices.map { it.copy(data = null) }
         assertEquals(expected, data)
     }
+
+    /** e.g. a live dataset that hardware announces at startup before any client is connected */
+    @Test
+    fun datasetAnnouncedBeforeConnectIsSentOnConnect() {
+        hardware.output.put(MicroscopeDataset(dataset))
+        lightSleepOnCondition { hardware.output.isEmpty() }
+
+        val (_, received) = connectClient()
+        lightSleepOnNull { received.firstOrNull { it is Dataset } }
+        assertEquals(dataset, received.firstOrNull { it is Dataset })
+
+        val liveSlice = Slice(
+            2000, dataset.Id, 0, NO_ID, 0, System.currentTimeMillis(), Vector3f(),
+            sizeBytes = dataset.sliceByteSize.toLong(), data = MemoryUtil.memAlloc(dataset.sliceByteSize)
+        )
+        hardware.output.put(MicroscopeSlice(liveSlice))
+        lightSleepOnNull { received.firstOrNull { it is Slice } }
+
+        assertEquals(liveSlice.copy(data = null), received.firstOrNull { it is Slice })
+        assertDatasetsBeforeData(received)
+    }
+
+    /**
+     * Every stack and slice has to arrive after its dataset. A dataset may arrive more than once, e.g. when a
+     * broadcast and the resend for a new client overlap. That is fine, the later one replaces the earlier one.
+     */
+    private fun assertDatasetsBeforeData(received: List<BaseServerSignal>) {
+        val known = mutableSetOf<Long>()
+        received.filterIsInstance<BaseServerSignal.DataAvailableSignal>().forEach {
+            when (it) {
+                is Dataset -> known += it.Id
+                is Stack -> assert(it.datasetId in known) { "Stack ${it.Id} arrived before its dataset ${it.datasetId}" }
+                is Slice -> assert(it.datasetId in known) { "Slice ${it.Id} arrived before its dataset ${it.datasetId}" }
+            }
+        }
+    }
+
+    /** a client that connected after the dataset was resent still gets it before data referencing it */
+    @Test
+    fun datasetIsAnnouncedBeforeDataOfOlderDataset() {
+        val otherDataset = dataset.copy(Id = 8)
+        hardware.output.put(MicroscopeDataset(dataset))
+        hardware.output.put(MicroscopeDataset(otherDataset))
+        lightSleepOnCondition { hardware.output.isEmpty() }
+
+        // on connect only the most recent dataset is resent
+        val (_, received) = connectClient()
+        lightSleepOnNull { received.firstOrNull { it is Dataset } }
+
+        val stack = stack(100, 0)
+        hardware.output.put(MicroscopeStack(stack))
+        lightSleepOnNull { received.firstOrNull { it is Stack } }
+
+        assertEquals(stack, received.firstOrNull { it is Stack })
+        assertDatasetsBeforeData(received)
+    }
 }
