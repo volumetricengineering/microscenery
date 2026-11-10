@@ -48,7 +48,7 @@ class FileHWScene : DefaultScene(withSwingUI = false) {
 
         stageSpaceManager.stageRoot.spatial().scale *= Vector3f(1f, 1f, 1f)
 
-        stageSpaceManager.sliceManager.transferFunctionManager.maxDisplayRange = 65000f
+        stageSpaceManager.datasetManager.channelManager.configureAll { maxDisplayRange = 65000f }
 
         //tfUI.name = "Slices"
 
@@ -57,11 +57,12 @@ class FileHWScene : DefaultScene(withSwingUI = false) {
             stageSpaceManager.stack(Vector3f(), Vector3f())
             Thread.sleep(1000)
 
-            stageSpaceManager.sliceManager.transferFunctionManager.transferFunction =
-                TransferFunction.ramp(0.08605619f, 0.5125469f, 1f)
-            stageSpaceManager.sliceManager.transferFunctionManager.colormap = Colormap.get("plasma")
-            stageSpaceManager.sliceManager.transferFunctionManager.maxDisplayRange = 3300.0f
-            stageSpaceManager.sliceManager.transferFunctionManager.minDisplayRange = 1125.0f
+            stageSpaceManager.datasetManager.channelManager.configureAll {
+                transferFunction = TransferFunction.ramp(0.08605619f, 0.5125469f, 1f)
+                colormap = Colormap.get("plasma")
+                maxDisplayRange = 3300.0f
+                minDisplayRange = 1125.0f
+            }
         }
         thread {
             while (true) {

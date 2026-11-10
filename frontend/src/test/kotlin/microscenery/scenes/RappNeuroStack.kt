@@ -64,8 +64,10 @@ class RappNeuroStack : DefaultScene("RappNeuroStack", width = 840, height = 840)
 //            layout = MicroscopeLayout.Scape(MicroscopeLayout.Axis.Y, 33f)
         )
 
-        stageSpaceManager.sliceManager.transferFunctionManager.maxDisplayRange = 60000f
-        stageSpaceManager.sliceManager.transferFunctionManager.minDisplayRange = 2100f
+        stageSpaceManager.datasetManager.channelManager.configureAll {
+            maxDisplayRange = 60000f
+            minDisplayRange = 2100f
+        }
 
 
         //microscope.loadImg(it)

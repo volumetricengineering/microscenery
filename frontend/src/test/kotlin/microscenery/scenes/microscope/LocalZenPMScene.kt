@@ -37,7 +37,6 @@ class LocalZenPMScene : DefaultScene(withSwingUI = true) {
         super.init()
         MicroscenerySettings.set(Settings.StageSpace.HideFocusFrame,true)
         MicroscenerySettings.set(Settings.StageSpace.HideFocusTargetFrame,true)
-        MicroscenerySettings.set(Settings.ZenMicroscope.readChannel,1)
         MicroscenerySettings.set(Settings.Ablation.SizeUM,30f)
 
         cam.spatial().position = Vector3f(0f, 0f, 2f)
@@ -61,14 +60,16 @@ class LocalZenPMScene : DefaultScene(withSwingUI = true) {
 
         //for nice cut pictures
         stageSpaceManager.scene.findByClassname("Light").forEach { (it as Light).intensity *= 0.25f }
-        stageSpaceManager.sliceManager.stacks.firstOrNull()?.volume?.colormap = Colormap.get("grays")
+        stageSpaceManager.datasetManager.channelManager.configureAll { colormap = Colormap.get("grays") }
 
         thread {
             Thread.sleep(100)
             zenMicroscope.sync()
             zenMicroscope.snapSlice()
-            //stageSpaceManager.sliceManager.transferFunctionManager.loadTransferFunctionFromFile(File("""C:\Users\JanPhD\Downloads\drosophila.tf"""))
-            stageSpaceManager.sliceManager.transferFunctionManager.loadTransferFunctionFromFile(File("""C:\Users\JanPhD\Downloads\MamCherryArthur.tf"""))
+            stageSpaceManager.datasetManager.channelManager.configureAll {
+                //loadTransferFunctionFromFile(File("""C:\Users\JanPhD\Downloads\drosophila.tf"""))
+                loadTransferFunctionFromFile(File("""C:\Users\JanPhD\Downloads\MamCherryArthur.tf"""))
+            }
             stageSpaceManager.focusManager.focusTarget.spatial().position = stageSpaceManager.stageAreaCenter
         }
 

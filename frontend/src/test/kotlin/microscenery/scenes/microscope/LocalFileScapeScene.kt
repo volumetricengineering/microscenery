@@ -10,8 +10,8 @@ import microscenery.lightSleepOnCondition
 import microscenery.signals.*
 import microscenery.stageSpace.MicroscopeLayout
 import microscenery.stageSpace.StageSpaceManager
-import org.joml.Vector2i
 import org.joml.Vector3f
+import org.joml.Vector3i
 import org.lwjgl.system.MemoryUtil
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferUShort
@@ -72,22 +72,25 @@ class LocalFileScapeScene : DefaultScene(withSwingUI = true) {
 class FolderReaderMicroscope : MicroscopeHardwareAgent() {
     private val logger by lazyLogger(System.getProperty("scenery.LogLevel", "info"))
 
-    private var idCounter = 1
+    /** dataset of all read images */
+    private val dataset = Dataset(
+        Id = nextId(),
+        dimensions = Vector3i(1024, 1024, 1),
+        voxelSize = Vector3f(0.399f),
+        numericType = NumericType.UINT16,
+        from = Vector3f(),
+        to = Vector3f(),
+        channels = listOf(ChannelMetadata(active = true)),
+        sourceFormat = SourceFormat.TIFF,
+        displayName = "Folder"
+    )
 
     init {
-
-        val im = ImageMeta(
-            imageSize = Vector2i(1024),
-            vertexDiameter = 0.399f,
-            numericType = NumericType.INT16
-        )
-
         hardwareDimensions = HardwareDimensions(
             stageMin = Vector3f(-1000f),
-            stageMax = Vector3f(1000f),
-            im
+            stageMax = Vector3f(1000f)
         )
-        imageMeta = im
+        output.put(MicroscopeDataset(dataset))
         status = MicroscopeStatus(
             ServerState.MANUAL,
             stagePosition,
@@ -135,13 +138,15 @@ class FolderReaderMicroscope : MicroscopeHardwareAgent() {
 
     fun externalSnap(position: Vector3f, data: ByteBuffer) {
         val sliceSignal = Slice(
-            idCounter++,
-            System.currentTimeMillis(),
-            position,
-            hardwareDimensions.byteSize,
-            null,
-            imageMeta,
-            data
+            Id = nextId(),
+            datasetId = dataset.Id,
+            channelIndex = 0,
+            stackId = NO_ID,
+            stackSliceIndex = 0,
+            created = System.currentTimeMillis(),
+            stagePos = position,
+            sizeBytes = dataset.sliceByteSize.toLong(),
+            data = data
         )
         output.put(MicroscopeSlice(sliceSignal))
     }

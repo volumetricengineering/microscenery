@@ -30,7 +30,7 @@ class RemoteSCAPEClientScene : DefaultScene(withSwingUI = true) {
         )
 
         lightSleepOnCondition { stageSpaceManager.hardware.status().state == ServerState.MANUAL }
-        lightSleepOnCondition { stageSpaceManager.hardware.hardwareDimensions().imageSize.x != 0 }
+        lightSleepOnCondition { stageSpaceManager.stageSpaceModel.currentDataset != null }
 
     }
 

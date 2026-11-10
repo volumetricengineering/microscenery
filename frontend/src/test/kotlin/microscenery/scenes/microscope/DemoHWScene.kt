@@ -69,7 +69,7 @@ class DemoHWScene : DefaultScene(withSwingUI = true) {
             //db.randomStatic(10)
             //db.fixed()
             //db.fixedStack(Vector3f(150f,150f,100f),Vector3f(150f,150f,150f))
-            stageSpaceManager.sliceManager.transferFunctionManager.maxDisplayRange = 1000f
+            stageSpaceManager.datasetManager.channelManager.configureAll { maxDisplayRange = 1000f }
 
 
             //stageSpaceManager.sampleStageSpace(Vector3f(25f), Vector3f(175f), Vector3f(30f, 30f, 50f))

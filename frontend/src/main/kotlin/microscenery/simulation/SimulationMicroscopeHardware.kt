@@ -16,6 +16,7 @@ import microscenery.stageSpace.StageSpaceManager
 import org.joml.Vector2f
 import org.joml.Vector2i
 import org.joml.Vector3f
+import org.joml.Vector3i
 import org.lwjgl.system.MemoryUtil
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.BlockingQueue
@@ -44,9 +45,20 @@ class SimulationMicroscopeHardware(
     // this lock is only relevant for self replicating commands e.g. snapSlice(live=true)
     private val stopLock = Any()
 
-    // for Slices and stacks
-    var idCounter = 0
     var lastSnap = 0L
+
+    /** dataset of all standalone slices */
+    private val liveDataset = Dataset(
+        Id = nextId(),
+        dimensions = Vector3i(imageSize.x, imageSize.y, 1),
+        voxelSize = Vector3f(1f),
+        numericType = NUMERIC_TYPE,
+        from = Vector3f(),
+        to = Vector3f(),
+        channels = listOf(ChannelMetadata(active = true)),
+        sourceFormat = SourceFormat.PROCEDURAL,
+        displayName = "Live"
+    )
 
     var fastMode: Boolean = false
         set(value) {
@@ -69,17 +81,11 @@ class SimulationMicroscopeHardware(
 
         focalPlane.material().cullingMode = Material.CullingMode.FrontAndBack
 
-        val im = ImageMeta(
-            imageSize = imageSize,
-            vertexDiameter = 1f,
-            numericType = NumericType.INT16
-        )
         hardwareDimensions = HardwareDimensions(
             stageMin = Vector3f(0f),
-            stageMax = stageSize,
-            im
+            stageMax = stageSize
         )
-        imageMeta = im
+        output.put(MicroscopeDataset(liveDataset))
 
         status = MicroscopeStatus(
             ServerState.MANUAL,
@@ -186,9 +192,9 @@ class SimulationMicroscopeHardware(
             }
         }
 
-        val imgX = hardwareDimensions.imageSize.x
-        val imgY = hardwareDimensions.imageSize.y
-        val sliceBuffer = MemoryUtil.memAlloc(imgX * imgY * 2)
+        val imgX = liveDataset.imageSize.x
+        val imgY = liveDataset.imageSize.y
+        val sliceBuffer = MemoryUtil.memAlloc(imgX * imgY * NUMERIC_TYPE.bytes)
         val shortBuffer = sliceBuffer.asShortBuffer()
 
         val microDummys = getMicroDummysInFocus()
@@ -214,14 +220,17 @@ class SimulationMicroscopeHardware(
         }
 
 
+        val target = hwCommand.target
         val signal = Slice(
-            idCounter++,
-            System.currentTimeMillis(),
-            stagePosition,
-            sliceBuffer.capacity(),
-            hwCommand.stackIdAndSliceIndex,
-            imageMeta,
-            sliceBuffer
+            Id = nextId(),
+            datasetId = target?.datasetId ?: liveDataset.Id,
+            channelIndex = 0,
+            stackId = target?.stackId ?: NO_ID,
+            stackSliceIndex = target?.sliceIndex ?: 0,
+            created = System.currentTimeMillis(),
+            stagePos = stagePosition,
+            sizeBytes = sliceBuffer.capacity().toLong(),
+            data = sliceBuffer
         )
         Thread.sleep(exposureMS)
         output.put(MicroscopeSlice(signal))
@@ -246,16 +255,32 @@ class SimulationMicroscopeHardware(
         val end = hardwareDimensions.coercePosition(meta.endPosition, logger)
         val dist = end - start
         val steps = (dist.length() / meta.stepSize).roundToInt()
-        val step = dist * (1f / steps)
+        // steps == 0 if start and end are (almost) equal. Avoid NaN in the dataset then.
+        val step = if (steps > 0) dist * (1f / steps) else Vector3f()
 
-        val currentStack = Stack(
-            if (meta.id > 0) meta.id else idCounter++,
-            start,
-            end,
-            steps,
-            nowMillis(),
-            imageMeta
-        )
+        // a live series continues its dataset with the next timepoint
+        val series = hwCommand.series
+        val (dataset, timepointIndex) = if (series != null && series.dataset.from == start) {
+            series.dataset to series.timepointIndex
+        } else {
+            val newDataset = Dataset(
+                Id = nextId(),
+                dimensions = Vector3i(liveDataset.imageSize.x, liveDataset.imageSize.y, steps),
+                voxelSize = Vector3f(liveDataset.voxelSize.x, liveDataset.voxelSize.y,
+                    if (steps > 0) step.length() else meta.stepSize),
+                numericType = NUMERIC_TYPE,
+                from = start,
+                to = start + (step * (steps - 1).coerceAtLeast(0).toFloat()),
+                channels = liveDataset.channels,
+                timepointCount = if (meta.live) 0 else 1,
+                sourceFormat = SourceFormat.PROCEDURAL,
+                displayName = "Stack"
+            )
+            output.put(MicroscopeDataset(newDataset))
+            newDataset to 0
+        }
+
+        val currentStack = Stack(nextId(), dataset.Id, 0, timepointIndex, nowMillis())
         output.put(MicroscopeStack(currentStack))
         status = status.copy(state = ServerState.STACK)
 
@@ -266,13 +291,16 @@ class SimulationMicroscopeHardware(
                     hardwareDimensions
                 )
             )
-            hardwareCommandsQueue.add(HardwareCommand.SnapImage(false, currentStack.Id to i))
+            hardwareCommandsQueue.add(
+                HardwareCommand.SnapImage(false, HardwareCommand.SliceTarget(dataset.Id, currentStack.Id, i))
+            )
         }
 
         if (hwCommand.signal.live) {
             addToCommandQueueIfNotStopped(
                 HardwareCommand.GenerateStackCommands(
-                    signal = meta.copy(id = currentStack.Id)
+                    signal = meta,
+                    series = HardwareCommand.StackSeries(dataset, timepointIndex + 1)
                 )
             )
         }
@@ -311,10 +339,24 @@ class SimulationMicroscopeHardware(
             val safeTarget = hwd.coercePosition(target, logger)
         }
 
-        data class SnapImage(val live: Boolean, val stackIdAndSliceIndex: Pair<Int, Int>? = null) : HardwareCommand()
-        data class GenerateStackCommands(val signal: MicroscopeControlSignal.AcquireStack) : HardwareCommand()
+        /** @param target null for standalone slices of the live dataset */
+        data class SnapImage(val live: Boolean, val target: SliceTarget? = null) : HardwareCommand()
+
+        /** @param series set when continuing a live stack series with its next timepoint */
+        data class GenerateStackCommands(
+            val signal: MicroscopeControlSignal.AcquireStack,
+            val series: StackSeries? = null
+        ) : HardwareCommand()
         data class Sync(val lock: Semaphore) : HardwareCommand()
         object Stop : HardwareCommand()
         object Shutdown : HardwareCommand()
+
+        data class SliceTarget(val datasetId: Long, val stackId: Long, val sliceIndex: Int)
+        data class StackSeries(val dataset: Dataset, val timepointIndex: Int)
+    }
+
+    companion object {
+        /** the simulation writes positive shorts */
+        private val NUMERIC_TYPE = NumericType.UINT16
     }
 }

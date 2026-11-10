@@ -28,7 +28,7 @@ data class TubeScenario(val randomSeed: Long = 1337, val radius: Float = 350f, v
 
         val tf = TransferFunction.ramp(0.0f, 1.0f, 0.5f)
         tf.controlPoints().first().factor = 0.04f
-        stageSpaceManager.sliceManager.transferFunctionManager.transferFunction = tf
+        stageSpaceManager.datasetManager.channelManager.configureAll { transferFunction = tf }
 
         roiPos.y = roiPos.y * (stageSpaceSize - roiHeight) + roiHeight / 2
         roiPos.x = roiPos.x * stageSpaceSize * 0.2f + stageSpaceSize / 2

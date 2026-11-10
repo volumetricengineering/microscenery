@@ -7,13 +7,13 @@ import graphics.scenery.attribute.spatial.HasSpatial
 import graphics.scenery.controls.InputHandler
 import graphics.scenery.controls.behaviours.MouseDragPlane
 import graphics.scenery.utils.lazyLogger
-import graphics.scenery.volumes.TransferFunctionEditor
 import graphics.scenery.volumes.Volume
 import microscenery.*
 import microscenery.hardware.micromanagerConnection.MicroManagerUtil
 import microscenery.stageSpace.*
 import microscenery.stageSpace.FocusManager
 import net.miginfocom.swing.MigLayout
+import org.joml.Vector2i
 import org.joml.Vector3f
 import org.scijava.ui.behaviour.ClickBehaviour
 import java.text.SimpleDateFormat
@@ -132,7 +132,7 @@ class StageSpaceUI(val stageSpaceManager: StageSpaceManager) {
         }),
         StageUICommand("TransFunc", "T", object : ClickBehaviour {
             override fun click(x: Int, y: Int) {
-                TransferFunctionEditor.showTFFrame(stageSpaceManager.sliceManager.transferFunctionManager, "Transfer Function")
+                ChannelsFrame(stageSpaceManager.datasetManager.channelManager)
             }
         }),
         StageUICommand("Settings", "T", object : ClickBehaviour {
@@ -162,13 +162,14 @@ class StageSpaceUI(val stageSpaceManager: StageSpaceManager) {
                     infoPanel.removeAll()
                     (event.new as? Node)?.let { node ->
                         infoPanel.add(JLabel("name: ${node.name}"), "wrap")
-                        val sliceManager = msHub.getAttribute(SliceManager::class.java)
+                        val datasetManager = msHub.getAttribute(DatasetManager::class.java)
                         when(node){
                             is Volume -> {
-                                val meta = sliceManager.getStackMetadata(node) ?: return@let
-                                val created = SimpleDateFormat("hh:mm:ss").format(Date(meta.created))
+                                val (dataset, channelIndex) = datasetManager.getVolumeInfo(node) ?: return@let
+                                val created = SimpleDateFormat("hh:mm:ss").format(Date(dataset.created))
                                 infoPanel.add(JLabel("Created: $created"),"wrap")
-                                infoPanel.add(JLabel("Slices: ${meta.slicesCount}"),"wrap")
+                                infoPanel.add(JLabel("Slices: ${dataset.slicesPerStack}"),"wrap")
+                                infoPanel.add(JLabel("Channel: ${ChannelManager.channelKey(dataset, channelIndex)}"),"wrap")
                                 if (node.timepointCount > 1) {
                                     infoPanel.add(
                                         JLabel("Time Point: ${node.currentTimepoint + 1}/${node.timepointCount}"),
@@ -193,7 +194,7 @@ class StageSpaceUI(val stageSpaceManager: StageSpaceManager) {
                                 }
                                 infoPanel.add(JButton("Delete Volume").apply {
                                     this.addActionListener {
-                                        sliceManager.deleteStack(node)
+                                        datasetManager.deleteStack(node)
                                         uiModel.selected = null
                                     }
                                 },"wrap")
@@ -217,7 +218,7 @@ class StageSpaceUI(val stageSpaceManager: StageSpaceManager) {
                                 },"wrap")
                                 infoPanel.add(JButton("Delete Slice").apply {
                                     this.addActionListener {
-                                        sliceManager.deleteSlice(node)
+                                        datasetManager.deleteSlice(node)
                                         uiModel.selected = null
                                     }
                                 },"wrap")
@@ -254,7 +255,7 @@ class StageSpaceUI(val stageSpaceManager: StageSpaceManager) {
     }
 
     fun stageKeyUI(inputHandler: InputHandler, cam: Camera, commands: List<StageUICommand> = desktopCommands) {
-        fun imgSize() = stageSpaceManager.hardware.hardwareDimensions().imageSize
+        fun imgSize() = stageSpaceManager.stageSpaceModel.currentDataset?.imageSize ?: Vector2i(1)
         listOf(
             "frame_forward" to {10}, "frame_back" to {10}, "frame_left" to {imgSize().x}, "frame_right" to {imgSize().x}, "frame_up" to {imgSize().y}, "frame_down"  to {imgSize().y}
         ).forEach { (name, speed) ->

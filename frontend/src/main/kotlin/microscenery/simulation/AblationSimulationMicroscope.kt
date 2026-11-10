@@ -44,65 +44,80 @@ class AblationSimulationMicroscope (
         microscope.stop()
     }
 
+    /** datasets of the wrapped microscope, needed for the geometry of the slices */
+    private var datasets = emptyMap<Long, Dataset>()
+
     override fun onLoop() {
         val signal = microscope.output.poll(200, TimeUnit.MILLISECONDS) ?: return
 
-        if (signal is MicroscopeSlice){
-            if (ablationPoints.isEmpty()) {
-                this.output.put(signal)
+        if (signal is MicroscopeDataset) {
+            datasets = datasets + (signal.dataset.Id to signal.dataset)
+        }
+
+        if (signal is MicroscopeSlice && ablationPoints.isNotEmpty()) {
+            simulateAblation(signal.slice)
+        }
+        // all changes where in-place therefore we just forward the signal
+        this.output.put(signal)
+    }
+
+    private fun simulateAblation(slice: Slice) {
+        //logger.info("Processing Slice ${slice.Id}")
+        val dataset = datasets[slice.datasetId] ?: run {
+            logger.warn("Got slice ${slice.Id} of unknown dataset ${slice.datasetId}. Not simulating ablation.")
+            return
+        }
+        val bytes = when (dataset.numericType) {
+            NumericType.INT8, NumericType.UINT8 -> 1
+            NumericType.INT16, NumericType.UINT16 -> 2
+            NumericType.FLOAT32 -> {
+                logger.warn("Ablation simulation does not support FLOAT32. Not simulating ablation.")
                 return
             }
+        }
+        val unsigned = dataset.numericType == NumericType.UINT8 || dataset.numericType == NumericType.UINT16
+        val imageSize = dataset.imageSize
+        val pixelSize = dataset.voxelSize
+        val ablationRadius = MicroscenerySettings.get(Settings.Ablation.SizeUM,153f) * ablationPoints.first().laserPower
 
-            //logger.info("Processing Slice ${signal.slice.Id}")
+        val raw = slice.data ?: throw IllegalArgumentException("got slice signal without data buffer")
+        if (raw.isReadOnly) throw IllegalArgumentException("read only data buffer currently not supported")
+        raw.rewind()
+        val data8 = raw
+        val data16 = raw.asShortBuffer()
 
-            val slice = signal.slice
-            val hwd = hardwareDimensions
-            val ablationRadius = MicroscenerySettings.get(Settings.Ablation.SizeUM,153f) * ablationPoints.first().laserPower
+        for (imgY in 0 until imageSize.y) for (imgX in 0 until imageSize.x){
+            val value = when {
+                bytes == 1 && unsigned -> data8.get().toInt() and 0xFF
+                bytes == 1 -> data8.get().toInt()
+                unsigned -> data16.get().toInt() and 0xFFFF
+                else -> data16.get().toInt()
+            }
 
-            val raw = slice.data ?: throw IllegalArgumentException("got slice signal without data buffer")
-            if (raw.isReadOnly) throw IllegalArgumentException("read only data buffer currently not supported")
-            raw.rewind()
-            val data8 = raw
-            val data16 = raw.asShortBuffer()
+            var newValue = value
+            val pixelStagePos = Vector3f(slice.stagePos)
+            pixelStagePos.x += imgX * pixelSize.x
+            pixelStagePos.y += imgY * pixelSize.y
+            if (imgOrigin == Origin.Center){
+                pixelStagePos.x -= imageSize.x * 0.5f * pixelSize.x
+                pixelStagePos.y -= imageSize.y * 0.5f * pixelSize.y
+            }
 
-            for (imgY in 0 until hwd.imageSize.y) for (imgX in 0 until hwd.imageSize.x){
-                val value = when(hwd.numericType){
-                    NumericType.INT8 -> data8.get().toInt()
-                    NumericType.INT16 -> data16.get().toInt()
-                }
-
-                var newValue = value
-                val pixelStagePos = Vector3f(slice.stagePos)
-                pixelStagePos.x += imgX * hwd.vertexDiameter
-                pixelStagePos.y += imgY * hwd.vertexDiameter
-                if (imgOrigin == Origin.Center){
-                    pixelStagePos.x -= hwd.imageSize.x * 0.5f * hwd.vertexDiameter
-                    pixelStagePos.y -= hwd.imageSize.y * 0.5f * hwd.vertexDiameter
-                }
-
-                ablationPoints.forEach { ablationPoint ->
-                    val diff = ablationPoint.position.distance(pixelStagePos)
-                    if (diff <= ablationRadius) {
-                        newValue = (newValue * (diff / ablationRadius)).toInt()
-                    }
-                }
-                if (newValue != value) {
-                    when(hwd.numericType){
-                        NumericType.INT8 -> {
-                            data8.put(data8.position() - 1, (newValue).toByte())
-                        }
-                        NumericType.INT16 -> {
-                            data16.put(data16.position() - 1, (newValue).toShort())
-                        }
-                    }
+            ablationPoints.forEach { ablationPoint ->
+                val diff = ablationPoint.position.distance(pixelStagePos)
+                if (diff <= ablationRadius) {
+                    newValue = (newValue * (diff / ablationRadius)).toInt()
                 }
             }
-            raw.rewind()
-            // all changes where in-place therefore we just forward the signal
-            this.output.put(signal)
-        } else {
-            this.output.put(signal)
+            if (newValue != value) {
+                if (bytes == 1) {
+                    data8.put(data8.position() - 1, (newValue).toByte())
+                } else {
+                    data16.put(data16.position() - 1, (newValue).toShort())
+                }
+            }
         }
+        raw.rewind()
     }
 
     // ### wrap this.microscope for all other microscope functions ###

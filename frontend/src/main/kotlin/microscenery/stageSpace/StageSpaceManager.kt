@@ -47,8 +47,12 @@ class StageSpaceManager(
     var stageAreaCenter = Vector3f()
         private set
 
-    val sliceManager = SliceManager(hardware, stageRoot, scene, msHub)
+    val datasetManager = DatasetManager(stageRoot, scene, msHub)
     val focusManager = FocusManager(this,msHub)
+
+    /** Extent of one image in stage coordinates of the most recent dataset. Zero until the first dataset. */
+    private val imageExtent: Vector2f
+        get() = stageSpaceModel.currentDataset?.imageExtent ?: Vector2f()
 
     var stagePosition: Vector3f
         get() = hardware.status().stagePosition
@@ -58,19 +62,12 @@ class StageSpaceManager(
 
     init {
         MicroscenerySettings.setIfUnset(Settings.StageSpace.CameraDependendZSorting, true)
-        MicroscenerySettings.setVector3f(Settings.Stage.ExploreResolution,
-            Vector3f(
-                hardware.hardwareDimensions().imageSize.x.toFloat(),
-                hardware.hardwareDimensions().imageSize.y.toFloat(),
-                50f
-            ))
-
 
         //init hub TODO: move out of ssmanager
         msHub.addAttribute(Scene::class.java, scene)
         msHub.addAttribute(MicroscopeHardware::class.java,hardware)
         msHub.addAttribute(StageSpaceManager::class.java,this)
-        msHub.addAttribute(SliceManager::class.java, sliceManager)
+        msHub.addAttribute(DatasetManager::class.java, datasetManager)
 
         scene.addChild(scaleAndRotationPivot)
         scaleAndRotationPivot.addChild(stageRoot)
@@ -97,17 +94,21 @@ class StageSpaceManager(
         val signal = hardware.output.poll(200, TimeUnit.MILLISECONDS)
         signal?.let { logger.trace("got a {} signal:\n{}", signal::class.simpleName, signal) }
         when (signal) {
+            is MicroscopeDataset -> {
+                handleDatasetSignal(signal.dataset)
+            }
             is MicroscopeSlice -> {
-                sliceManager.handleSliceSignal(signal.slice, layout)
+                datasetManager.handleSliceSignal(signal.slice, layout)
             }
             is HardwareDimensions -> {
-                handleHardwareDimensionsSignal(signal)
+                stageSpaceModel.hardwareDimensions = signal
+                updateStageLayout()
             }
             is MicroscopeStatus -> {
                 focusManager.newStagePosition(signal.stagePosition)
             }
             is MicroscopeStack -> {
-                sliceManager.handleStackSignal(signal.stack, msHub.getAttribute(Hub::class.java))
+                datasetManager.handleStackSignal(signal.stack, msHub.getAttribute(Hub::class.java))
             }
             is AblationResults -> {
                 logger.info("Ablation took ${signal.totalTimeMillis}ms for ${signal.perPointTime.size} points " +
@@ -117,31 +118,41 @@ class StageSpaceManager(
         }
     }
 
-    private fun handleHardwareDimensionsSignal(signal: HardwareDimensions) {
-        stageAreaCenter = (signal.stageMax + signal.stageMin).times(0.5f)
+    private fun handleDatasetSignal(dataset: Dataset) {
+        val oldExtent = imageExtent
+        datasetManager.handleDatasetSignal(dataset)
+        stageSpaceModel.currentDataset = dataset
+        if (imageExtent != oldExtent) updateStageLayout()
+    }
+
+    /**
+     * Scales and positions the stage space according to the stage limits and the image extent of the current dataset.
+     */
+    private fun updateStageLayout() {
+        val hwd = stageSpaceModel.hardwareDimensions
+        val imgExtent = imageExtent
+        stageAreaCenter = (hwd.stageMax + hwd.stageMin).times(0.5f)
 
         stageRoot.spatial {
             // scale the space in such a way that is initially always the same visual size and easy to handle by GUI
-            val xSize = (signal.stageMax.x - signal.stageMin.x + signal.imageSize.x * signal.vertexDiameter)
-            scale = Vector3f(1 / xSize)
+            val xSize = (hwd.stageMax.x - hwd.stageMin.x + imgExtent.x)
+            // avoid division by zero before stage limits and image size are known
+            scale = Vector3f(1 / (xSize.takeIf { it > 0f } ?: 1f))
             position = Vector3f(-1f) * stageAreaCenter * scale
         }
         stageAreaBorders.spatial {
             position = stageAreaCenter
-            scale = (signal.stageMax - signal.stageMin).apply {
+            scale = (hwd.stageMax - hwd.stageMin).apply {
                 // extra space for images at the edge of stage space
-                val imgPixSize = Vector2f(signal.imageSize) * signal.vertexDiameter
                 val imageSize = when (layout.sheet) {
-                    MicroscopeLayout.Axis.X -> Vector3f(0f, imgPixSize.y, imgPixSize.x)
-                    MicroscopeLayout.Axis.Y -> Vector3f(imgPixSize.x, 0f, imgPixSize.y)
-                    MicroscopeLayout.Axis.Z -> Vector3f(imgPixSize, 0f)
+                    MicroscopeLayout.Axis.X -> Vector3f(0f, imgExtent.y, imgExtent.x)
+                    MicroscopeLayout.Axis.Y -> Vector3f(imgExtent.x, 0f, imgExtent.y)
+                    MicroscopeLayout.Axis.Z -> Vector3f(imgExtent, 0f)
                 }
                 this.add(imageSize)
                 this.mul(1.1f)
             }
         }
-
-        stageSpaceModel.hardwareDimensions = signal
     }
 
     fun stack(from: Vector3f, to: Vector3f, live: Boolean = MicroscenerySettings.get(Settings.Stage.NextStackLive, false)) {
@@ -149,7 +160,7 @@ class StageSpaceManager(
             MicroscopeControlSignal.AcquireStack(
                 from,
                 to,
-                MicroscenerySettings.get(Settings.Stage.PrecisionZ, hardware.hardwareDimensions().vertexDiameter),
+                MicroscenerySettings.get(Settings.Stage.PrecisionZ, stageSpaceModel.currentDataset?.voxelSize?.z ?: 1f),
                 live
             )
         )
@@ -191,19 +202,11 @@ class StageSpaceManager(
             }
         }
 
-        resolution.x = resolution.x.let {
-            if (it > 0f){
-                it
-            } else {
-                hardware.hardwareDimensions().imageSize.x * hardware.hardwareDimensions().vertexDiameter
-            }
-        }
-
         // if a component of resolution is 0 replace with sensible default (eg. image size)
+        val imgExtent = imageExtent
         for (d in listOf(0,1)){
             if (resolution[d] <=  0f){
-                resolution.setComponent(d,
-                hardware.hardwareDimensions().imageSize[d] * hardware.hardwareDimensions().vertexDiameter)
+                resolution.setComponent(d, imgExtent[d].takeIf { it > 0f } ?: 50f)
             }
         }
         if (resolution.z <= 0f) resolution.z = 50f
@@ -238,7 +241,7 @@ class StageSpaceManager(
     }
 
     fun clearStage() {
-        sliceManager.clearSlices()
+        datasetManager.clearSlices()
     }
 
     fun worldToStageSpace(s: Spatial){

@@ -10,6 +10,7 @@ import microscenery.signals.Stack
 import microscenery.simulation.Procedural
 import org.joml.Vector2i
 import org.joml.Vector3f
+import org.joml.Vector3i
 import org.lwjgl.system.MemoryUtil
 import java.util.*
 import java.util.concurrent.ArrayBlockingQueue
@@ -36,23 +37,30 @@ class DemoMicroscopeHardware(
 
     val procedural = Procedural(seed = seed ?: Random().nextLong())
 
-    var idCounter = 0
     var liveThread: Thread? = null
-    var currentStack: Stack? = null
-    var stackSliceCounter: Int = 0
+
+    /** in pixels */
+    private val imageSize = Vector2i(50 / binning, 50 / binning)
+
+    /** dataset of all standalone slices */
+    private val liveDataset = Dataset(
+        Id = nextId(),
+        dimensions = Vector3i(imageSize.x, imageSize.y, 1),
+        voxelSize = Vector3f(1f * binning),
+        numericType = NumericType.UINT8,
+        from = Vector3f(),
+        to = Vector3f(),
+        channels = listOf(ChannelMetadata(active = true)),
+        sourceFormat = SourceFormat.PROCEDURAL,
+        displayName = "Live"
+    )
 
     init {
-        val im = ImageMeta(
-            Vector2i(50 / binning, 50 / binning),
-            vertexDiameter = 1f * binning,
-            numericType = NumericType.INT8
-        )
         hardwareDimensions = HardwareDimensions(
             stageMin = Vector3f(0f),
-            stageMax = size,
-            imageMeta = im
+            stageMax = size
         )
-        imageMeta = im
+        output.put(MicroscopeDataset(liveDataset))
         status = MicroscopeStatus(
             ServerState.MANUAL,
             stagePosition,
@@ -70,14 +78,21 @@ class DemoMicroscopeHardware(
         }
 
     override fun snapSlice() {
+        snapSlice(null)
+    }
+
+    /**
+     * @param target the dataset and stack the slice belongs to. Null for a standalone slice of [liveDataset].
+     */
+    private fun snapSlice(target: StackTarget?) {
         val sliceBuffer = when (binning) {
             1 -> {
-                procedural.slice(stagePosition, hardwareDimensions.imageSize)
+                procedural.slice(stagePosition, imageSize)
             }
 
             else -> {
-                val imgX = hardwareDimensions.imageSize.x
-                val imgY = hardwareDimensions.imageSize.y
+                val imgX = imageSize.x
+                val imgY = imageSize.y
                 val sliceBuffer = MemoryUtil.memAlloc(imgX * imgY)
 
                 val dataX = imgX * binning
@@ -104,16 +119,20 @@ class DemoMicroscopeHardware(
         }
 
         val signal = Slice(
-            idCounter++,
-            System.currentTimeMillis(),
-            stagePosition,
-            sliceBuffer.capacity(),
-            currentStack?.let { it.Id to stackSliceCounter },
-            imageMeta,
-            sliceBuffer
+            Id = nextId(),
+            datasetId = target?.datasetId ?: liveDataset.Id,
+            channelIndex = 0,
+            stackId = target?.stackId ?: NO_ID,
+            stackSliceIndex = target?.sliceIndex ?: 0,
+            created = System.currentTimeMillis(),
+            stagePos = stagePosition,
+            sizeBytes = sliceBuffer.capacity().toLong(),
+            data = sliceBuffer
         )
         output.put(MicroscopeSlice(signal))
     }
+
+    private data class StackTarget(val datasetId: Long, val stackId: Long, val sliceIndex: Int)
 
     override fun goLive() {
         if (
@@ -159,25 +178,30 @@ class DemoMicroscopeHardware(
             val end = meta.endPosition
             val dist = end - start
             val steps = (dist.length() / meta.stepSize).roundToInt()
-            val step = dist * (1f / steps)
+            val step = if (steps > 0) dist * (1f / steps) else Vector3f()
 
-            currentStack = Stack(
-                idCounter++,
-                start,
-                end,
-                steps,
-                nowMillis(),
-                imageMeta
+            val dataset = Dataset(
+                Id = nextId(),
+                dimensions = Vector3i(imageSize.x, imageSize.y, steps),
+                voxelSize = Vector3f(liveDataset.voxelSize.x, liveDataset.voxelSize.y,
+                    if (steps > 0) step.length() else meta.stepSize),
+                numericType = liveDataset.numericType,
+                from = start,
+                to = start + (step * (steps - 1).coerceAtLeast(0).toFloat()),
+                channels = liveDataset.channels,
+                timepointCount = 1,
+                sourceFormat = SourceFormat.PROCEDURAL,
+                displayName = "Stack"
             )
-            output.put(MicroscopeStack(currentStack!!))
+            output.put(MicroscopeDataset(dataset))
+            val stack = Stack(nextId(), dataset.Id, 0, 0, nowMillis())
+            output.put(MicroscopeStack(stack))
 
             for (i in 0 until steps) {
                 stagePosition = start + (step * i.toFloat())
-                stackSliceCounter = i
-                snapSlice()
+                snapSlice(StackTarget(dataset.Id, stack.Id, i))
             }
 
-            currentStack = null
             status = status.copy(state = ServerState.MANUAL)
         }
     }

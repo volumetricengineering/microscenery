@@ -36,6 +36,9 @@ class SliceRenderNode(
     HasSpatial, HasRenderable,
     HasCustomMaterial<ShaderMaterial>, HasGeometry {
 
+    /** The channel this slice belongs to. Its look is controlled by it. */
+    var viewChannel: ViewChannel? = null
+
     private var transferFunctionTexture : Texture
     var transferFunction : TransferFunction = transferFunction
         set(value) {

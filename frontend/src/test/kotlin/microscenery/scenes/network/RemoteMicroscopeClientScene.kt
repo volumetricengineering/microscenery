@@ -8,7 +8,7 @@ import microscenery.stageSpace.StageSpaceManager
 import org.zeromq.ZContext
 
 
-class RemoteMicroscopeClientScene(nonMicroscopeMode: Boolean = true) : DefaultScene(withSwingUI = true) {
+class RemoteMicroscopeClientScene : DefaultScene(withSwingUI = true) {
     val stageSpaceManager: StageSpaceManager
     val msHub = MicrosceneryHub(hub)
 
@@ -18,7 +18,7 @@ class RemoteMicroscopeClientScene(nonMicroscopeMode: Boolean = true) : DefaultSc
         MicroscenerySettings.set(Settings.MMMicroscope.IsMicromanagerMicroscope,false)
 
         val zContext = ZContext()
-        val client = RemoteMicroscopeClient(zContext = zContext, nonMicroscopeMode = nonMicroscopeMode)
+        val client = RemoteMicroscopeClient(zContext = zContext)
         stageSpaceManager = StageSpaceManager(
             client, scene, msHub,
             //viewMode = true
@@ -27,7 +27,7 @@ class RemoteMicroscopeClientScene(nonMicroscopeMode: Boolean = true) : DefaultSc
         //stageSpaceManager.stageRoot.spatial().scale *= Vector3f(1f, 1f, 2f)
 
         lightSleepOnCondition { stageSpaceManager.hardware.status().state == ServerState.MANUAL }
-        lightSleepOnCondition { stageSpaceManager.hardware.hardwareDimensions().imageSize.x != 0 }
+        lightSleepOnCondition { stageSpaceManager.stageSpaceModel.currentDataset != null }
         //DemoBehavior(50f, stageSpaceManager).randomLive()
 
         //TransferFunctionEditor(tfContainer = stageSpaceManager)

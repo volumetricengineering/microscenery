@@ -16,13 +16,13 @@ class RemoteMicroscopeServerMMExample {
             // settings like port can be set in [microscenery.properties]
             val zContext = ZContext()
 
-            val hardware: MicroscopeHardware = MicromanagerWrapper(MMCoreConnector(initLocalMMCoreFake()))
-            val imgSize = hardware.hardwareDimensions().imageSize
+            val mmCoreConnector = MMCoreConnector(initLocalMMCoreFake())
+            val hardware: MicroscopeHardware = MicromanagerWrapper(mmCoreConnector)
 
             @Suppress("UNUSED_VARIABLE")
             val server = RemoteMicroscopeServer(
                 hardware,
-                storage = SliceStorage(500 * imgSize.x * imgSize.y),
+                storage = SliceStorage(500 * mmCoreConnector.width * mmCoreConnector.height),
                 zContext = zContext
             )
         }

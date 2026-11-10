@@ -9,7 +9,7 @@ import graphics.scenery.utils.extensions.times
 import microscenery.MicrosceneryHub
 import microscenery.MicroscenerySettings
 import microscenery.Settings
-import microscenery.signals.HardwareDimensions
+import microscenery.signals.Dataset
 import microscenery.toReadableString
 import org.joml.Vector3f
 import org.joml.Vector4f
@@ -73,15 +73,15 @@ open class Frame(
             }
         }
 
-        applyHardwareDimensions(stageSpaceModel.hardwareDimensions)
-        stageSpaceModel.registerListener<HardwareDimensions>(StageSpaceModel::hardwareDimensions) { _, new ->
-            new?.let { applyHardwareDimensions(new) }
+        stageSpaceModel.currentDataset?.let { applyDataset(it) }
+        stageSpaceModel.registerListener<Dataset>(StageSpaceModel::currentDataset) { _, new ->
+            new?.let { applyDataset(new) }
         }
     }
 
-
-    private fun applyHardwareDimensions(hwd: HardwareDimensions) {
-        pivot.spatialOrNull()?.scale =
-            Vector3f(hwd.imageSize.x.toFloat() * hwd.vertexDiameter, hwd.imageSize.y.toFloat() * hwd.vertexDiameter, 1f)
+    /** Scales the frame to the image extent of [dataset] */
+    private fun applyDataset(dataset: Dataset) {
+        val extent = dataset.imageExtent
+        pivot.spatialOrNull()?.scale = Vector3f(extent.x, extent.y, 1f)
     }
 }

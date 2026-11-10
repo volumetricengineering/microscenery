@@ -62,7 +62,7 @@ class LocalZenScene : DefaultScene(withSwingUI = true) {
 
         //for nice cut pictures
         stageSpaceManager.scene.findByClassname("Light").forEach { (it as Light).intensity *= 0.25f }
-        stageSpaceManager.sliceManager.stacks.firstOrNull()?.volume?.colormap = Colormap.get("grays")
+        stageSpaceManager.datasetManager.channelManager.configureAll { colormap = Colormap.get("grays") }
 
         thread {
             Thread.sleep(100)

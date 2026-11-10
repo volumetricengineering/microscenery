@@ -23,14 +23,14 @@ class RemoteZenPMScene : DefaultScene(withSwingUI = true) {
 
         cam.spatial().position = Vector3f(0f, 0f, 5f)
         val zContext = ZContext()
-        val client = RemoteMicroscopeClient(zContext = zContext, nonMicroscopeMode = false)
+        val client = RemoteMicroscopeClient(zContext = zContext)
 
         val hardware: MicroscopeHardware = client
         stageSpaceManager = StageSpaceManager(hardware, scene, msHub)
 
         //for nice cut pictures
         stageSpaceManager.scene.findByClassname("Light").forEach { (it as Light).intensity *= 0.25f }
-        stageSpaceManager.sliceManager.stacks.firstOrNull()?.volume?.colormap = Colormap.get("grays")
+        stageSpaceManager.datasetManager.channelManager.configureAll { colormap = Colormap.get("grays") }
 
     }
 

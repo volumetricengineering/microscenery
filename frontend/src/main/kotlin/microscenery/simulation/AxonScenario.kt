@@ -29,11 +29,14 @@ data class AxonScenario(
         val random = Random(randomSeed)
         val stageRoot = stageSpaceManager.stageRoot
 
-        stageSpaceManager.sliceManager.transferFunctionManager.loadTransferFunctionFromFile(
-            File("""./frontend/src/test/kotlin/microscenery/scenes/stageStudy/axionTransferFunction""")
-        )
-        stageSpaceManager.sliceManager.transferFunctionManager.colormap =
+        val colormap =
             Colormap.fromPNGFile(File("""./frontend/src/test/kotlin/microscenery/scenes/stageStudy/axionColormap.png"""))
+        stageSpaceManager.datasetManager.channelManager.configureAll {
+            loadTransferFunctionFromFile(
+                File("""./frontend/src/test/kotlin/microscenery/scenes/stageStudy/axionTransferFunction""")
+            )
+            this.colormap = colormap
+        }
 
 
         val root = RichNode()
