@@ -81,6 +81,9 @@ object Settings {
          * Only the first block is used and adapted for imaging and ablation. The following blocks are kept as they are
          * for ablation experiments (follow-up experiments) and deactivated for imaging experiments.
          */ const val customFollowUpExperimentBlocks = "ZenMicroscope.customFollowUpExperimentBlocks"
+        /* int
+        * If = 0 remove sleep command, if negative its ignored
+        * */ const val debugForceAblationLayerSleepTime = "ZenMicroscope.debugForceAblationLayerSleepTime"
         /** float */ const val debugBleachingImageOffsetFactorStageCooridnates = "ZenMicroscope.debugBleachingImageOffsetFactorStageCooridnates"
         /** float */ const val debugBleachingImageOffsetFactorPixelCooridnates = "ZenMicroscope.debugBleachingImageOffsetFactorPixelCooridnates"
     }
